@@ -58,7 +58,7 @@ end
 #===============================================================================
 # ■ Game_Battler
 #===============================================================================
-class Game_Battler
+class Game_Battler < Game_BattlerBase
   attr_accessor :damage_pop
   attr_accessor :damage
   attr_accessor :damage_type
@@ -77,6 +77,8 @@ class Game_Battler
   attr_accessor :knockback_duration 
   attr_accessor :hp_damage
   attr_accessor :mp_damage
+  attr_accessor :collapse_duration_t
+  attr_accessor :gain_duration
   
  #--------------------------------------------------------------------------
  # ● Initialize
@@ -99,7 +101,41 @@ class Game_Battler
       @cast_action = [0,0,0,0,0]
       @counter_action = [0,0,true]
       @knockback_duration = XAS_BA::DEFAULT_KNOCK_BACK_DURATION
+      @collapse_duration_t = XAS_BA::DEFAULT_COLLAPSE_BACK_DURATION
+      @gain_duration = 0
       x_initialize
+  end
+  
+  #--------------------------------------------------------------------------
+  # ● 대미지의 처리
+  #    호출전에 @result.hp_damage @result.mp_damage @result.hp_drain
+  #    @result.mp_drain 가 설정되어 있는 것.
+  #    ※ 기본공격 또는 스킬 타격 또는 적 스킬 피격
+  #--------------------------------------------------------------------------
+  def before_execute_damage(user, item = nil)
+    if self.is_a?(Game_Actor) && @result.hp_damage > 0
+      if @hp - @result.hp_damage < ( mhp * XAS_BA_ENEMY::LOWHP / 100 )
+        $game_map.screen.start_flash(Color.new(255, 0, 0), 8)
+      else
+        $game_map.screen.start_flash(Color.new(255, 0, 0, 50), 8)
+      end
+    end
+    if user.is_a?(Game_Actor) and !item.nil? and user != self
+      if XAS_BA_ENEMY::DAMAGE_SET.include?(self.enemy_id)
+        if XAS_BA_ENEMY::DAMAGE_SET[self.enemy_id].include?(item.id)
+          @result.hp_damage = XAS_BA_ENEMY::DAMAGE_SET[self.enemy_id][item.id].to_i
+        end
+      end
+    end
+    if self.state_life && self.hp <= @result.hp_damage
+      @result.hp_damage = self.hp - 1
+    end
+    if user.state_drain
+      user.hp += @result.hp_damage
+      user.damage = -@result.hp_damage
+      user.damage_pop = true
+    end
+    execute_damage(user)
   end
   
  #--------------------------------------------------------------------------
@@ -137,6 +173,70 @@ class Game_Battler
      return unless @guard_directions.include?(direction)
      @guard_directions.delete(direction)     
  end  
+  
+  #--------------------------------------------------------------------------
+  # ● DrainHP Effect 
+  #--------------------------------------------------------------------------
+  def drainhp_effect(user) 
+      return if user.dead?
+      return if self.e_item 
+      user.damage = -self.damage.to_i
+      user.damage_pop = true         
+      user.hp += self.damage.to_i        
+  end
+
+  #--------------------------------------------------------------------------
+  # ● DrainMP Effect 
+  #--------------------------------------------------------------------------
+  def drainsp_effect(user,old_damage)  
+      return if user.dead?
+      return if self.e_item 
+      damage_mp = -old_damage 
+      user.damage = $data_system.words.mp + " " + damage_mp.to_s
+      user.damage_pop = true         
+      user.mp += old_damage
+  end
+  
+  #------------------------------------------------------------------------ 
+  # ● Execute Mp Damage
+  #------------------------------------------------------------------------   
+  def execute_mp_damage(user, skill = nil)
+      old_sp = self.sp
+      if self.damage > self.mp
+         old_damage = self.mp                 
+         real_damage = $data_system.words.mp + " " + self.mp.to_s   
+         self.mp -= self.mp     
+         self.damage = real_damage        
+      else
+         old_damage = self.damage         
+         real_damage = $data_system.words.mp + " " + self.damage.to_s 
+         self.mp -= self.damage   
+         self.damage = real_damage
+      end
+      if skill != nil 
+        if $data_skills[skill.id].element_set.include?($data_system.elements.index(XAS_BA_BATTLEEVENT_NONPREEMPT::DRAIN)) or
+           user.state_drain   
+           drainsp_effect(user,old_damage) 
+         end   
+      else             
+         drainsp_effect(user,old_damage) if user.e_drain 
+      end  
+  end      
+  
+  #------------------------------------------------------------------------ 
+  # ● Execute Hp Damage
+  #------------------------------------------------------------------------   
+  def execute_hp_damage(user, skill = nil)
+      self.hp -= self.damage.to_i 
+      if skill != nil
+         if $data_skills[skill.id].element_set.include?($data_system.elements.index(XAS_ELEMENT::DRAIN)) or
+         user.state_drain 
+         drainhp_effect(user)  
+         end
+      else   
+         drainhp_effect(user) if user.e_drain         
+      end  
+  end         
  
 end  
 
@@ -149,6 +249,26 @@ class Game_Actor < Game_Battler
   attr_accessor :x_action2_id
   attr_accessor :skill_id
   attr_accessor :x_item_id
+  attr_accessor :item_or_skill_1
+  attr_accessor :item_or_skill_2
+  attr_accessor :item_or_skill_3
+  attr_accessor :item_or_skill_4
+  attr_accessor :item_or_skill_5
+  attr_accessor :item_or_skill_6
+  attr_accessor :item_or_skill_7
+  attr_accessor :item_or_skill_8
+  attr_accessor :item_or_skill_9
+  attr_accessor :item_or_skill_0
+  attr_accessor :item_extra_1
+  attr_accessor :item_extra_2
+  attr_accessor :item_extra_3
+  attr_accessor :item_extra_4
+  attr_accessor :item_extra_5
+  attr_accessor :item_extra_6
+  attr_accessor :item_extra_7
+  attr_accessor :item_extra_8
+  attr_accessor :item_extra_9
+  attr_accessor :item_extra_0
   attr_accessor :x_charge_action
   attr_accessor :old_equipment_id
   attr_accessor :item_id
@@ -164,6 +284,28 @@ class Game_Actor < Game_Battler
       @x_action2_id = 0
       @skill_id = 0
       @x_item_id = 0
+      @item_or_skill_1 = 0
+      @item_or_skill_2 = 0
+      @item_or_skill_3 = 0
+      @item_or_skill_4 = 0
+      @item_or_skill_5 = 0
+      @item_or_skill_5 = 0
+      @item_or_skill_6 = 0
+      @item_or_skill_7 = 0
+      @item_or_skill_8 = 0
+      @item_or_skill_9 = 0
+      @item_or_skill_0 = 0
+      @item_extra_1 = 0
+      @item_extra_2 = 0
+      @item_extra_3 = 0
+      @item_extra_4 = 0
+      @item_extra_5 = 0
+      @item_extra_5 = 0
+      @item_extra_6 = 0
+      @item_extra_7 = 0
+      @item_extra_8 = 0
+      @item_extra_9 = 0
+      @item_extra_0 = 0
       @item_id = 0
       @x_charge_action = [0,0,0,0]
       @old_level = @level
@@ -179,7 +321,7 @@ class Game_Actor < Game_Battler
       return unless $game_party.in_battle 
       x_display_level_up(new_skills)
   end 
- 
+  
 end
 
 #===============================================================================
@@ -229,6 +371,9 @@ class Game_Character < Game_CharacterBase
   attr_accessor :orig_pos_x
   attr_accessor :orig_pos_y
   attr_accessor :shoot_time
+  attr_accessor :collapse_done #new
+  attr_accessor :hit_reaction #new
+  attr_accessor :self_target #new
   #--------------------------------------------------------------------------
   # ● Initialize
   #--------------------------------------------------------------------------    
@@ -259,6 +404,8 @@ class Game_Character < Game_CharacterBase
       @temp_id = 0
       @pre_move_speed = @move_speed
       @shoot_time = [0,0]
+      @hit_reaction = true #new
+      @self_target = 0 #new
   end
   
   #--------------------------------------------------------------------------
@@ -267,6 +414,14 @@ class Game_Character < Game_CharacterBase
   def invunerable(enable = false)
       return if @battler == nil or @battler.dead?
       @battler.invunerable = enable
+  end  
+  
+  #--------------------------------------------------------------------------
+  # ● Hud Visible
+  #--------------------------------------------------------------------------      
+  def hud_switch(enable = false)
+      return if @battler == nil or @battler.dead?
+      @battler.hud_switch = enable
   end  
   
   #--------------------------------------------------------------------------
@@ -285,6 +440,7 @@ class Game_Event < Game_Character
   attr_accessor :target
   attr_reader   :name
   attr_accessor :collision_attack 
+  attr_accessor :delect_swi
 
  #--------------------------------------------------------------------------
  # ● Object
@@ -293,6 +449,7 @@ class Game_Event < Game_Character
  def initialize(map_id, event)
      x_event_initialize(map_id, event)
      @collision_attack = false
+     @delect_swi = []
      if @event.name =~ /<O(\d+)>/i
         @opacity = $1.to_i  
      end   
@@ -404,6 +561,7 @@ end
 #==============================================================================
 class Game_Player < Game_Character
 
+  attr_accessor :delect_swi
  #--------------------------------------------------------------------------
  # ● Leader Changed
  #--------------------------------------------------------------------------  
@@ -432,6 +590,70 @@ $xas = true
 class Game_CharacterBase
   
   #--------------------------------------------------------------------------
+  # ● 똑바로 이동
+  #     d       : 방향(2,4,6,8)
+  #     turn_ok : 그 자리로의 향해 변경을 허가
+  #--------------------------------------------------------------------------
+  def move_straight(d, turn_ok = true)
+    d = 5 - d + 5 if self.battler.is_a?(Game_Enemy) && self.battler.state_confuse
+    d = ( rand( 4 ) + 1 ) * 2 if self.battler.is_a?(Game_Enemy) && self.battler.state_c_confuse
+    @move_succeed = passable?(@x, @y, d)
+    if @move_succeed
+      set_direction(d)
+      if self.battler.is_a?(Game_Enemy)
+        if self.battler.state_stop
+        else
+          @x = $game_map.round_x_with_direction(@x, d)
+          @y = $game_map.round_y_with_direction(@y, d)
+          @real_x = $game_map.x_with_direction(@x, reverse_dir(d))
+          @real_y = $game_map.y_with_direction(@y, reverse_dir(d))
+        end
+      else
+        @x = $game_map.round_x_with_direction(@x, d)
+        @y = $game_map.round_y_with_direction(@y, d)
+        @real_x = $game_map.x_with_direction(@x, reverse_dir(d))
+        @real_y = $game_map.y_with_direction(@y, reverse_dir(d))
+      end
+      increase_steps
+    elsif turn_ok
+      set_direction(d)
+      check_event_trigger_touch_front
+    end
+  end
+  
+  #--------------------------------------------------------------------------
+  # ● 비스듬하게 이동
+  #     horz : 횡방향(4 or 6)
+  #     vert : 세로 방향(2 or 8)
+  #--------------------------------------------------------------------------
+  def move_diagonal(horz, vert)
+    horz = 5 - horz + 5 if self.battler.is_a?(Game_Enemy) && self.battler.state_confuse
+    vert = 5 - vert + 5 if self.battler.is_a?(Game_Enemy) && self.battler.state_confuse
+    horz = ( rand( 2 ) + 1 ) * 2 + 2 if self.battler.is_a?(Game_Enemy) && self.battler.state_c_confuse
+    vert = ( rand( 2 ) + 1 ) * 6 - 4 if self.battler.is_a?(Game_Enemy) && self.battler.state_c_confuse
+    @move_succeed = diagonal_passable?(x, y, horz, vert)
+    if @move_succeed
+      if self.battler.is_a?(Game_Enemy)
+        if self.battler.state_stop
+        else
+          @x = $game_map.round_x_with_direction(@x, horz)
+          @y = $game_map.round_y_with_direction(@y, vert)
+          @real_x = $game_map.x_with_direction(@x, reverse_dir(horz))
+          @real_y = $game_map.y_with_direction(@y, reverse_dir(vert))
+        end
+      else
+        @x = $game_map.round_x_with_direction(@x, horz)
+        @y = $game_map.round_y_with_direction(@y, vert)
+        @real_x = $game_map.x_with_direction(@x, reverse_dir(horz))
+        @real_y = $game_map.y_with_direction(@y, reverse_dir(vert))
+      end
+      increase_steps
+    end
+    set_direction(horz) if @direction == reverse_dir(horz)
+    set_direction(vert) if @direction == reverse_dir(vert)
+  end
+  
+  #--------------------------------------------------------------------------
   # ● Set Direction
   #--------------------------------------------------------------------------          
    alias diagonal_set_direction set_direction
@@ -440,6 +662,26 @@ class Game_CharacterBase
        @diagonal_direction = 0
        reset_diagonal
    end
+  #--------------------------------------------------------------------------
+  # ● 반대로 이동
+  #     d       : 방향(2,4,6,8)
+  #     turn_ok : 그 자리로의 향해 변경을 허가
+  #--------------------------------------------------------------------------
+  def move_mirror(d, turn_ok = true)
+    mirrord = ( 5 - d ) * 2 + d
+    @move_succeed = passable?(@x, @y, mirrord)
+    if @move_succeed
+      set_direction(mirrord)
+      @x = $game_map.round_x_with_direction(@x, mirrord)
+      @y = $game_map.round_y_with_direction(@y, mirrord)
+      @real_x = $game_map.x_with_direction(@x, reverse_dir(mirrord))
+      @real_y = $game_map.y_with_direction(@y, reverse_dir(mirrord))
+      increase_steps
+    elsif turn_ok
+      set_direction(mirrord)
+      check_event_trigger_touch_front
+    end
+  end
    
 end   
 
@@ -675,13 +917,22 @@ class Game_Character < Game_CharacterBase
   #--------------------------------------------------------------------------
   # ● Move toward Player
   #--------------------------------------------------------------------------
-  alias move_toward_player_diagonal move_toward_player
   def move_toward_player
-      if @diagonal 
-         diagonal_move_toward_player
+    if self.self_target > 0
+      if self.self_target != 0
+      if @diagonal
+         diagonal_move_toward_enemy
          return  
       end
-      move_toward_player_diagonal
+      move_toward_character($game_map.events[@self_target])
+      end
+    else
+       if @diagonal
+         diagonal_move_toward_player
+         return  
+       end
+      move_toward_character($game_player)
+    end
   end   
    
   #--------------------------------------------------------------------------
@@ -690,6 +941,53 @@ class Game_Character < Game_CharacterBase
   def diagonal_move_toward_player
       sx = distance_x_from($game_player.x)
       sy = distance_y_from($game_player.y)
+      if sx == 0 and sy == 0
+         return
+      end
+      abs_sx = sx.abs
+      abs_sy = sy.abs
+      if abs_sx == abs_sy
+        rand(2) == 0 ? abs_sx += 1 : abs_sy += 1
+      end
+      if abs_sx
+         if sx < 0 and sy > 0
+            move_diagonal(6, 8)
+            move_random unless moving?
+            enable_diagonal(9) 
+         elsif sx > 0 and sy > 0
+            move_diagonal(4, 8)
+            move_random unless moving?
+            enable_diagonal(7) 
+         elsif sx > 0 and sy < 0
+            move_diagonal(4, 2)
+            move_random unless moving?
+            enable_diagonal(1) 
+         elsif sx < 0 and sy < 0
+            move_diagonal(6, 2)
+            move_random unless moving?
+            enable_diagonal(3) 
+         elsif sx < 0 
+            move_straight(6)
+         elsif sx > 0 
+            move_straight(4)
+         elsif sy > 0 
+            move_straight(8)
+         elsif sy < 0 
+            move_straight(2)
+         end
+         if abs_sx != 1 and abs_sy != 1
+            move_random unless moving?
+         end  
+      end
+ end
+  
+  #--------------------------------------------------------------------------
+  # ● Diagonal Move Toward Enemy
+  #--------------------------------------------------------------------------  
+  def diagonal_move_toward_enemy
+      sx = distance_x_from($game_map.events[self.self_target].x)
+      sy = distance_y_from($game_map.events[self.self_target].y)
+    return if self.battler.is_a?(Game_Actor)
       if sx == 0 and sy == 0
          return
       end
@@ -871,7 +1169,6 @@ class Game_Character < Game_CharacterBase
           when 7;  turn_upper_right
       end
   end 
- 
 end    
 
 #===============================================================================
@@ -882,16 +1179,48 @@ class Game_Player < Game_Character
   #--------------------------------------------------------------------------
   # ● Move By Input
   #--------------------------------------------------------------------------    
-  alias diagonal_move_by_input move_by_input
+#~   alias diagonal_move_by_input move_by_input
+#~   def move_by_input
+#~       if XAS_SYSTEM::PLAYER_DIAGONAL_MOVEMENT 
+#~          player_diagonal_move_by_input
+#~         # update_sprite_diagonal
+#~          update_return_direction
+#~          return
+#~       end
+#~       diagonal_move_by_input
+#~   end   
   def move_by_input
+    if self.battler.state_confuse
+      if XAS_SYSTEM::PLAYER_DIAGONAL_MOVEMENT 
+         player_diagonal_move_by_input_mirror
+        # update_sprite_diagonal
+         update_return_direction
+         return
+      end
+      return if !movable? || $game_map.interpreter.running?
+      move_mirror(Input.dir4) if Input.dir4 > 0
+    elsif self.battler.state_c_confuse
+      if XAS_SYSTEM::PLAYER_DIAGONAL_MOVEMENT 
+        player_diagonal_move_by_input_c_random
+        update_return_direction
+        return
+      end
+      return if !movable? || $game_map.interpreter.running?
+      move_chance_random(Input.dir4) if Input.dir4 > 0
+    elsif self.battler.state_stop
+      return
+    else
       if XAS_SYSTEM::PLAYER_DIAGONAL_MOVEMENT 
          player_diagonal_move_by_input
         # update_sprite_diagonal
          update_return_direction
          return
       end
-      diagonal_move_by_input
-  end   
+      return if !movable? || $game_map.interpreter.running?
+      move_straight(Input.dir4) if Input.dir4 > 0
+    end
+    
+  end
     
   #--------------------------------------------------------------------------
   # ● Update Sprite Diagonal
@@ -955,7 +1284,79 @@ class Game_Player < Game_Character
                 @diagonal_direction = 9  
       end
   end  
-  
+  #--------------------------------------------------------------------------
+  # ● Player Diagonal Move By Input (Mirror)
+  #--------------------------------------------------------------------------      
+  def player_diagonal_move_by_input_mirror
+      return unless movable?
+      return if $game_map.interpreter.running?
+      case Input.dir8
+           when 1 
+               move_diagonal(6, 8)
+               unless moving?
+                   move_straight(6)
+                   move_straight(8)                 
+               end  
+               @diagonal_direction = 9  
+           when 2; move_straight(8)
+           when 3
+                move_diagonal(4, 8)
+                unless moving?
+                   move_straight(4)
+                   move_straight(8)
+                end
+                @diagonal_direction = 7 
+           when 4;  move_straight(6)
+           when 6;  move_straight(4)
+           when 7
+                 move_diagonal(6, 2)
+                 unless moving?
+                    move_straight(6)
+                    move_straight(2)
+                end
+                @diagonal_direction = 3
+           when 8;  move_straight(2)
+           when 9  
+                 move_diagonal(4, 2)
+                 unless moving?
+                    move_straight(4)
+                    move_straight(2)
+                end
+                @diagonal_direction = 1  
+      end
+  end  
+  #--------------------------------------------------------------------------
+  # ● Move By Input (Mirror)
+  #--------------------------------------------------------------------------      
+  def move_by_input_mirror
+    return if !movable? || $game_map.interpreter.running?
+    move_mirror(Input.dir4) if Input.dir4 > 0
+  end
+  #--------------------------------------------------------------------------
+  # ● Player Diagonal Move By Input (Random)
+  #--------------------------------------------------------------------------      
+  def player_diagonal_move_by_input_c_random
+      return unless movable?
+      return if $game_map.interpreter.running?
+      case Input.dir8
+           when 1; move_random
+           when 2; move_random
+           when 3; move_random
+           when 4; move_random
+           when 6; move_random
+           when 7; move_random
+           when 8; move_random
+           when 9; move_random
+      end
+  end  
+  #--------------------------------------------------------------------------
+  # ● Move By Input (Chance Random)
+  #--------------------------------------------------------------------------      
+  def move_by_input_c_random
+    return if !movable? || $game_map.interpreter.running?
+    move_c_random(Input.dir4) if Input.dir4 > 0
+  end
+
 end
 
 
@@ -985,6 +1386,7 @@ class Game_Character < Game_CharacterBase
       return false if self.jumping?
       return false if self.knockbacking?
       return false if self.stop
+      return false if @fall
       return true
   end
     
@@ -996,12 +1398,13 @@ class Game_Character < Game_CharacterBase
       execute_force_action
       execute_force_action_tool_effect if @tool_id > 0 and @tool_effect != "" 
       reset_auto_action if @force_action_times == 0 
+      guide_duration
   end 
   
   #--------------------------------------------------------------------------
   # ● Execute Force Action
   #--------------------------------------------------------------------------          
-  def execute_force_action  
+  def execute_force_action
       case @force_action
         when "Forward" 
             move_forward
@@ -1043,8 +1446,12 @@ class Game_Character < Game_CharacterBase
               if self.action != nil
                  turn_180
                  self.shoot(self.action.id) unless @force_action_times == 0
-              end   
-        end  
+               end   
+        when "Guide"
+          if self.action != nil
+            move_toward_player
+          end
+        end
   end  
   
   #--------------------------------------------------------------------------
@@ -1088,7 +1495,13 @@ class Game_Character < Game_CharacterBase
          @move_speed = 5.5           
       end     
   end      
-      
+  
+  def guide_duration
+    if @tool_effect == "Guide"
+      @force_action_times = 30
+    end
+  end
+  
 end  
 
 
@@ -1269,6 +1682,16 @@ class Game_Player < Game_Character
       update_action_2_button
       update_skill_button
       update_item_button
+      update_item_1_button
+      update_item_2_button
+      update_item_3_button
+      update_item_4_button
+      update_item_5_button
+      update_item_6_button
+      update_item_7_button
+      update_item_8_button
+      update_item_9_button
+      update_item_0_button
       update_change_leader_button
       update_charge_button
   end  
@@ -1489,7 +1912,7 @@ class Game_Player < Game_Character
   #--------------------------------------------------------------------------
   # ● Check Equipped Action
   #--------------------------------------------------------------------------    
-  def check_equipped_action(command_type)
+  def check_equipped_action(command_type, val=0)
       case command_type
          when 0 # Weapon 1
             weapon = self.battler.equips[0]
@@ -1514,15 +1937,38 @@ class Game_Player < Game_Character
          when 2 # Skill   
             
          when 3 # Item 
-            item_id = $data_items[self.battler.item_id]
-            if item_id == nil             
-               self.battler.x_item_id =  0
-               return
-            end   
-            item_id.note =~ /<Action ID = (\d+)>/
-            action_id =  $1.to_i
-            action_id = 0 if action_id == nil     
-            self.battler.x_item_id = action_id
+           case val
+             when 0
+               item_id = $data_items[self.battler.item_id]
+             when 1
+               item_id = $data_items[self.battler.item_extra_1]
+             when 2
+               item_id = $data_items[self.battler.item_extra_2]
+             when 3
+               item_id = $data_items[self.battler.item_extra_3]
+             when 4
+               item_id = $data_items[self.battler.item_extra_4]
+             when 5
+               item_id = $data_items[self.battler.item_extra_5]
+             when 6
+               item_id = $data_items[self.battler.item_extra_6]
+             when 7
+               item_id = $data_items[self.battler.item_extra_7]
+             when 8
+               item_id = $data_items[self.battler.item_extra_8]
+             when 9
+               item_id = $data_items[self.battler.item_extra_9]
+             when 10
+               item_id = $data_items[self.battler.item_extra_0]
+           end
+           if item_id == nil
+             self.battler.x_item_id = 0
+             return
+           end
+           item_id.note =~ /<Action ID = (\d+)>/
+           action_id =  $1.to_i
+           action_id = 0 if action_id == nil
+           self.battler.x_item_id = action_id
       end     
   end
     
@@ -1633,28 +2079,268 @@ class Game_Player < Game_Character
   # ● Update Skill Button
   #--------------------------------------------------------------------------      
   def update_skill_button
-      if Input.trigger?(SKILL_BUTTON)
-         type = 2
-         return unless can_use_skill_command?
-         return if execute_combo?(type)
-         check_equipped_action(type)
-         action_id = self.battler.skill_id
-         return if action_id == 0 
-         return if state_seal_command?(type)         
-         self.shoot(action_id)
-      end    
+#~       if Input.trigger?(SKILL_BUTTON)
+#~          type = 2
+#~          return unless can_use_skill_command?
+#~          return if execute_combo?(type)
+#~          check_equipped_action(type)
+#~          action_id = self.battler.skill_id
+#~          return if action_id == 0 
+#~          return if state_seal_command?(type)         
+#~          self.shoot(action_id)
+#~       end    
   end
   
   #--------------------------------------------------------------------------
   # ● Update Item Button
   #--------------------------------------------------------------------------      
   def update_item_button
-      if Input.trigger?(ITEM_BUTTON)
-         type = 3         
-         return unless can_use_item_command?
+#~       if Input.repeat?(ITEM_BUTTON) #trigger?(ITEM_BUTTON)
+#~          type = 3         
+#~          return unless can_use_item_command?
+#~          return if execute_combo?(type)
+#~          check_equipped_action(type)
+#~          action_id = self.battler.x_item_id
+#~          return if action_id == 0 
+#~          return if state_seal_command?(type)         
+#~          self.shoot(action_id)
+#~       end   
+  end
+  
+  #--------------------------------------------------------------------------
+  # ● Update Extra Button
+  #--------------------------------------------------------------------------      
+  def update_item_1_button
+      if Input.repeat?(ITEM_BUTTON_1)
+         self.battler.item_or_skill_1 == 0 ? type = 3 : type = 2
+         if type == 3
+           return unless can_use_item_command?
+         else
+           return unless can_use_skill_command?
+         end
          return if execute_combo?(type)
-         check_equipped_action(type)
-         action_id = self.battler.x_item_id
+         check_equipped_action(type, 1)
+         if type == 3
+           action_id = self.battler.x_item_id
+         else
+           action_id = self.battler.item_extra_1
+         end
+         return if action_id == 0 
+         return if state_seal_command?(type)         
+         self.shoot(action_id)
+      end   
+  end
+  
+  #--------------------------------------------------------------------------
+  # ● Update Extra Button
+  #--------------------------------------------------------------------------      
+  def update_item_2_button
+      if Input.repeat?(ITEM_BUTTON_2)
+         self.battler.item_or_skill_2 == 0 ? type = 3 : type = 2
+         if type == 3
+           return unless can_use_item_command?
+         else
+           return unless can_use_skill_command?
+         end
+         return if execute_combo?(type)
+         check_equipped_action(type, 2)
+         if type == 3
+           action_id = self.battler.x_item_id
+         else
+           action_id = self.battler.item_extra_2
+         end
+         return if action_id == 0 
+         return if state_seal_command?(type)         
+         self.shoot(action_id)
+      end   
+  end
+  
+  #--------------------------------------------------------------------------
+  # ● Update Extra Button
+  #--------------------------------------------------------------------------      
+  def update_item_3_button
+      if Input.repeat?(ITEM_BUTTON_3)
+         self.battler.item_or_skill_3 == 0 ? type = 3 : type = 2
+         if type == 3
+           return unless can_use_item_command?
+         else
+           return unless can_use_skill_command?
+         end
+         return if execute_combo?(type)
+         check_equipped_action(type, 3)
+         if type == 3
+           action_id = self.battler.x_item_id
+         else
+           action_id = self.battler.item_extra_3
+         end
+         return if action_id == 0 
+         return if state_seal_command?(type)         
+         self.shoot(action_id)
+      end   
+  end
+  
+  #--------------------------------------------------------------------------
+  # ● Update Extra Button
+  #--------------------------------------------------------------------------      
+  def update_item_4_button
+      if Input.repeat?(ITEM_BUTTON_4)
+         self.battler.item_or_skill_4 == 0 ? type = 3 : type = 2
+         if type == 3
+           return unless can_use_item_command?
+         else
+           return unless can_use_skill_command?
+         end
+         return if execute_combo?(type)
+         check_equipped_action(type, 4)
+         if type == 3
+           action_id = self.battler.x_item_id
+         else
+           action_id = self.battler.item_extra_4
+         end
+         return if action_id == 0 
+         return if state_seal_command?(type)         
+         self.shoot(action_id)
+      end   
+  end
+  
+  #--------------------------------------------------------------------------
+  # ● Update Extra Button
+  #--------------------------------------------------------------------------      
+  def update_item_5_button
+      if Input.repeat?(ITEM_BUTTON_5)
+         self.battler.item_or_skill_5 == 0 ? type = 3 : type = 2
+         if type == 3
+           return unless can_use_item_command?
+         else
+           return unless can_use_skill_command?
+         end
+         return if execute_combo?(type)
+         check_equipped_action(type, 5)
+         if type == 3
+           action_id = self.battler.x_item_id
+         else
+           action_id = self.battler.item_extra_5
+         end
+         return if action_id == 0 
+         return if state_seal_command?(type)         
+         self.shoot(action_id)
+      end   
+  end
+  
+  #--------------------------------------------------------------------------
+  # ● Update Extra Button
+  #--------------------------------------------------------------------------      
+  def update_item_6_button
+      if Input.repeat?(ITEM_BUTTON_6)
+         self.battler.item_or_skill_6 == 0 ? type = 3 : type = 2
+         if type == 3
+           return unless can_use_item_command?
+         else
+           return unless can_use_skill_command?
+         end
+         return if execute_combo?(type)
+         check_equipped_action(type, 6)
+         if type == 3
+           action_id = self.battler.x_item_id
+         else
+           action_id = self.battler.item_extra_6
+         end
+         return if action_id == 0 
+         return if state_seal_command?(type)         
+         self.shoot(action_id)
+      end   
+  end
+  
+  #--------------------------------------------------------------------------
+  # ● Update Extra Button
+  #--------------------------------------------------------------------------      
+  def update_item_7_button
+      if Input.repeat?(ITEM_BUTTON_7)
+         self.battler.item_or_skill_7 == 0 ? type = 3 : type = 2
+         if type == 3
+           return unless can_use_item_command?
+         else
+           return unless can_use_skill_command?
+         end
+         return if execute_combo?(type)
+         check_equipped_action(type, 7)
+         if type == 3
+           action_id = self.battler.x_item_id
+         else
+           action_id = self.battler.item_extra_7
+         end
+         return if action_id == 0 
+         return if state_seal_command?(type)         
+         self.shoot(action_id)
+      end   
+  end
+  
+  #--------------------------------------------------------------------------
+  # ● Update Extra Button
+  #--------------------------------------------------------------------------      
+  def update_item_8_button
+      if Input.repeat?(ITEM_BUTTON_8)
+         self.battler.item_or_skill_8 == 0 ? type = 3 : type = 2
+         if type == 3
+           return unless can_use_item_command?
+         else
+           return unless can_use_skill_command?
+         end
+         return if execute_combo?(type)
+         check_equipped_action(type, 8)
+         if type == 3
+           action_id = self.battler.x_item_id
+         else
+           action_id = self.battler.item_extra_8
+         end
+         return if action_id == 0 
+         return if state_seal_command?(type)         
+         self.shoot(action_id)
+      end   
+  end
+  
+  #--------------------------------------------------------------------------
+  # ● Update Extra Button
+  #--------------------------------------------------------------------------      
+  def update_item_9_button
+      if Input.repeat?(ITEM_BUTTON_9)
+         self.battler.item_or_skill_9 == 0 ? type = 3 : type = 2
+         if type == 3
+           return unless can_use_item_command?
+         else
+           return unless can_use_skill_command?
+         end
+         return if execute_combo?(type)
+         check_equipped_action(type, 9)
+         if type == 3
+           action_id = self.battler.x_item_id
+         else
+           action_id = self.battler.item_extra_9
+         end
+         return if action_id == 0 
+         return if state_seal_command?(type)         
+         self.shoot(action_id)
+      end   
+  end
+  
+  #--------------------------------------------------------------------------
+  # ● Update Extra Button
+  #--------------------------------------------------------------------------      
+  def update_item_0_button
+      if Input.repeat?(ITEM_BUTTON_0)
+         self.battler.item_or_skill_0 == 0 ? type = 3 : type = 2
+         if type == 3
+           return unless can_use_item_command?
+         else
+           return unless can_use_skill_command?
+         end
+         return if execute_combo?(type)
+         check_equipped_action(type, 10)
+         if type == 3
+           action_id = self.battler.x_item_id
+         else
+           action_id = self.battler.item_extra_0
+         end
          return if action_id == 0 
          return if state_seal_command?(type)         
          self.shoot(action_id)
@@ -1690,7 +2376,18 @@ class Game_Player < Game_Character
  def can_dash?
      return false unless XAS_BUTTON::ENABLE_DASH_BUTTON
      return false if self.battler.shield
-     return true if Input.press?(XAS_BUTTON::DASH_BUTTON) 
+     dash_possible = false
+     for i in 0 ... self.battler.equips.size
+       next if self.battler.equips[i] == nil
+       if self.battler.equips[i].note =~ /<(?:대쉬|Dash)>/
+         dash_possible = true
+         break
+       end
+     end
+     if self.battler.hp >= self.battler.mhp * XAS_BA_ENEMY::LOWHP / 100 && dash_possible
+     return !Input.press?(XAS_BUTTON::DASH_BUTTON) if $game_system.autodash?
+     return true if Input.press?(XAS_BUTTON::DASH_BUTTON)
+     end
      @dash_active = false
      return false
  end
@@ -1978,15 +2675,30 @@ module XAS_ACTION
   # ● shoot
   #--------------------------------------------------------------------------
   def shoot(action_id = 0)
+    self.delect_swi = [] if self.delect_swi == nil
+    self.delect_swi.delete(action_id) if self.delect_swi.include?(action_id)
       return if action_id == 0 
       skill = $data_skills[action_id]
       return unless can_shoot?(skill)
       execute_user_effects(skill)
       execute_call_event(action_id)      
-      self.action_attachment(action_id)
+      self.action_attachment(action_id) unless self.is_a?(Token_Bullet)
       execute_set_pose(action_id)
   end
-
+  #--------------------------------------------------------------------------
+  # ● Shoot Reset
+  #--------------------------------------------------------------------------
+  def shoot_reset(action_id = 0)
+    return if action_id == 0
+    self.delect_swi.delete(action_id) if self.delect_swi.include?(action_id)
+  end
+  #--------------------------------------------------------------------------
+  # ● Shoot Delect
+  #--------------------------------------------------------------------------
+  def shoot_delect(action_id = 0)
+    return if action_id == 0 
+    self.delect_swi.push(action_id) unless self.delect_swi.include?(action_id)
+  end
   #--------------------------------------------------------------------------
   # ● Can Shoot
   #--------------------------------------------------------------------------    
@@ -2077,7 +2789,16 @@ module XAS_ACTION
   #--------------------------------------------------------------------------          
   def enough_skill_cost?(skill)
       return false unless enough_mp_cost?(skill)         
+      return false unless enough_tp_cost?(skill)      
       return false unless enough_item_cost?(skill)      
+      return false unless enough_item_cost2?(skill)
+      unless @force_action_times > 0
+        unless @force_action == "All Shoot" or @force_action == "Four Shoot" or
+          @force_action == "Three Shoot" or @force_action == "Two Shoot"
+          self.battler.mp -= (skill.mp_cost * self.battler.mcr).to_i if enough_mp_cost?(skill)
+          self.battler.tp -= (skill.tp_cost * self.battler.tcr).to_i if enough_tp_cost?(skill)
+        end
+      end      
       return true
   end
     
@@ -2091,19 +2812,19 @@ module XAS_ACTION
          return true if @force_action == "Three Shoot" 
          return true if @force_action == "Two Shoot" 
       end
-      if self.battler.mp < skill.mp_cost 
+      if self.battler.mp < (skill.mp_cost * self.battler.mcr).to_i
          self.battler.damage = XAS_WORD::NO_MP
          self.battler.damage_pop = true
          return false
       else   
-         self.battler.mp -= skill.mp_cost
+#~          self.battler.mp -= (skill.mp_cost * self.battler.mcr).to_i
          return true
       end
       return true 
   end  
   
   #--------------------------------------------------------------------------
-  # ● Enough MP Cost
+  # ● Enough Item Cost
   #--------------------------------------------------------------------------      
   def enough_item_cost?(skill)
       return true if self.battler.is_a?(Game_Enemy)
@@ -2114,7 +2835,7 @@ module XAS_ACTION
          return true if @force_action == "Two Shoot" 
       end      
       skill.note =~ /<Item Cost = (\d+)>/
-      item_id = $1.to_i 
+      item_id = $1.to_i
       if item_id != nil and item_id != 0
          item_cost = $data_items[item_id]
          number = $game_party.item_number(item_cost)
@@ -2124,6 +2845,56 @@ module XAS_ACTION
             return false 
          else
             $game_party.lose_item(item_cost, 1, false)
+            return true
+         end            
+      end    
+      return true 
+  end    
+  
+  #--------------------------------------------------------------------------
+  # ● Enough TP Cost
+  #--------------------------------------------------------------------------        
+  def enough_tp_cost?(skill)  
+      if @force_action_times > 0
+         return true if @force_action == "All Shoot" 
+         return true if @force_action == "Four Shoot"  
+         return true if @force_action == "Three Shoot" 
+         return true if @force_action == "Two Shoot" 
+      end
+      if self.battler.tp < (skill.tp_cost * self.battler.tcr).to_i
+         self.battler.damage = XAS_WORD::NO_TP
+         self.battler.damage_pop = true
+         return false
+      else   
+#~          self.battler.tp -= (skill.tp_cost * self.battler.tcr).to_i
+         return true
+      end
+      return true 
+  end  
+  
+  #--------------------------------------------------------------------------
+  # ● Enough Item Cost 2
+  #--------------------------------------------------------------------------      
+  def enough_item_cost2?(skill)
+      return true if self.battler.is_a?(Game_Enemy)
+      if @force_action_times > 0
+         return true if @force_action == "All Shoot"
+         return true if @force_action == "Four Shoot"
+         return true if @force_action == "Three Shoot"
+         return true if @force_action == "Two Shoot" 
+      end      
+      skill.note =~ /<Item Costs = (\d+) - (\d+)>/
+      item_id = $1.to_i
+      item_num = $2.to_i
+      if item_id != nil and item_id != 0
+         item_cost = $data_items[item_id]
+         number = $game_party.item_number(item_cost)
+         if number == 0 or number == nil or number < item_num
+            self.battler.damage = XAS_WORD::NO_ITEM
+            self.battler.damage_pop = true
+            return false 
+         else
+            $game_party.lose_item(item_cost, item_num, false)
             return true
          end            
       end    
@@ -2141,6 +2912,33 @@ module XAS_ACTION
          if ani_id != nil
             self.animation_id = ani_id
          end   
+      end
+      if skill.note =~ /<Guide>/
+        @force_action = "Guide"
+        @force_action_times = 30
+        @self_target = 0
+        near_check = -1
+        for event in $game_map.events.values
+          next unless event.battler.is_a?(Game_Enemy)
+          next if event.battler.dead?
+          next if event.erased
+          next if event.battler.invunerable
+          next if event.battler.no_damage_pop
+          cx = ( event.x - self.x ).abs
+          cy = ( event.y - self.y ).abs
+          if ( cx * cy ) == 0
+            if near_check > cx + cy || near_check < 0
+              near_check = ( cx + cy )
+              @self_target = event.id
+            end
+          else
+            if near_check > Math.sqrt( ( cx * cx ) + ( cy * cy ) ) || near_check < 0
+              near_check = Math.sqrt( ( cx * cx ) + ( cy * cy ) ) 
+              @self_target = event.id
+            end
+          end
+          @self_target = -1 if self.battler.is_a?(Game_Enemy)
+        end
       end
       unless @force_action_times > 0
           #All Directions
@@ -2164,7 +2962,7 @@ module XAS_ACTION
   # ● Execute Set Pose
   #--------------------------------------------------------------------------      
   def execute_set_pose(action_id)
-      @action.duration = @action.sunflag 
+      @action.duration = @action.sunflag unless self.is_a?(Token_Bullet)
       make_pose(@action.self_motion, @action.sunflag ) 
       @pattern = 0
       @pattern_count  = 0
@@ -2211,6 +3009,7 @@ class Game_Action_XAS
   attr_accessor   :hit_events
   attr_accessor   :now_count
   attr_accessor   :pre_now_count
+  attr_accessor   :infinity_duration
   attr_accessor   :duration
   attr_accessor   :blow_power
   attr_accessor   :piercing
@@ -2233,6 +3032,7 @@ class Game_Action_XAS
   attr_accessor   :animation_time
   attr_accessor   :duration 
   attr_accessor   :item_cost
+  attr_accessor   :item_cost_num
   attr_accessor   :hit_shake
   attr_accessor   :hit_hold_target
   attr_accessor   :hit_bounce
@@ -2251,6 +3051,7 @@ class Game_Action_XAS
       @user        = user
       @id          = action_id
       @now_count   = 0
+      @infinity_duration = false
       @duration    = nil
       @attack_id   = 0
       @attack_range = 0
@@ -2277,6 +3078,7 @@ class Game_Action_XAS
       @user_invincible = false
       @short_range = false
       @item_cost = 0
+      @item_cost_num = 1
       @hit_shake = false
       @hit_hold_target = false
       @hit_bounce = false
@@ -2298,6 +3100,9 @@ class Game_Action_XAS
       end
       if @skill.note =~ /<Duration = (\d+)>/   
          @duration = $1.to_i
+      end
+      if @skill.note =~ /<Infinity Duration>/
+         @infinity_duration = true
       end
       if @skill.note =~ /<Pose = (\S+)>/   
          @self_motion = $1.to_s
@@ -2327,11 +3132,11 @@ class Game_Action_XAS
       if @skill.note =~ /<Blow Power = (\d+)>/  
          @blow_power = $1.to_i
       end   
-      if @skill.note =~ /<Impact Time  = (\d+)>/   
+      if @skill.note =~ /<Impact Time = (\d+)>/   
          @first_impact_time = $1.to_i
 
        end   
-      if @skill.note =~ /<Animation Time  = (\d+) - (\d+)>/   
+      if @skill.note =~ /<Ani Time = (\d+) - (\d+)>/   
          @animation_time[0] = $1.to_i
          @animation_time[1] = $2.to_i
       end
@@ -2346,6 +3151,10 @@ class Game_Action_XAS
       end   
       if @skill.note =~ /<Item Cost = (\d+)>/    
          @item_cost = $1.to_i
+      end         
+      if @skill.note =~ /<Item Costs = (\d+) - (\d+)>/    
+         @item_cost = $1.to_i
+         @item_cost_num = $2.to_i
       end         
       if @skill.note =~ /<Link Action ID = (\d+)>/    
          if user.battler != nil
@@ -2425,14 +3234,16 @@ class Game_Action_XAS
          unless id.nil? 
            @attack_id = id
            @hit_events.clear
-           @hit_events.push(self.user) unless @all_damage or @ally_damage
+           @hit_events.push(self.user) unless @all_damage or @ally_damage or self.user.battler.state_suicide
          end
       end
       if @attack_range_plan != nil
          range = @attack_range_plan[@now_count]
          @attack_range = range unless range.nil?
       end
-      @now_count += 1
+      self.user.delect_swi = [] if self.user.delect_swi == nil
+      @infinity_duration = false if self.user.delect_swi.include?(@attack_id)
+      @now_count += 1 unless @infinity_duration
   end  
   
   #--------------------------------------------------------------------------
@@ -2509,7 +3320,7 @@ class Token_Bullet < Token_Event
   # ● Check Tool Effects
   #-------------------------------------------------------------------------- 
   def check_tool_effects(user,skill,pre_direction)
-      if @action.ally_damage or @action.all_damage    
+      if @action.ally_damage or @action.all_damage or user.battler.state_suicide
          user.battler.invunerable_duration = 0
       end
      # Force Update Out Screen
@@ -2557,9 +3368,43 @@ class Token_Bullet < Token_Event
         @step_anime = true
         @force_action = "Forward" 
         @force_action_times = $1.to_i
+     #Guide  
+     elsif skill.note =~ /<Guide>/
+        self.tool_effect = "Guide"
+        self.diagonal = true
+        self.diagonal_direction = user.diagonal_direction
+        self.force_update = true
+        @move_frequency = 6
+        @move_speed = 5
+        @force_action = "Guide"
+        @force_action_times = 30
+        @self_target = 0
+        near_check = -1
+        for event in $game_map.events.values
+          next unless event.battler.is_a?(Game_Enemy) 
+          next if event.battler.dead?
+          next if event.erased
+          next if event.battler.invunerable
+          next if event.battler.no_damage_pop
+          cx = ( event.x - user.x ).abs
+          cy = ( event.y - user.y ).abs
+          if ( cx * cy ) == 0
+            if near_check > cx + cy || near_check < 0
+              near_check = ( cx + cy )
+              @self_target = event.id
+            end
+          else
+            if near_check > Math.sqrt( ( cx * cx ) + ( cy * cy ) ) || near_check < 0
+              near_check = Math.sqrt( ( cx * cx ) + ( cy * cy ) ) 
+              @self_target = event.id
+            end
+          end
+          @self_target = -1 if user.battler.is_a?(Game_Enemy)
+        end
      end     
       
    end
+ 
 end 
 
 
@@ -2782,6 +3627,7 @@ module XAS_ACTION
   #--------------------------------------------------------------------------      
   def execute_take_treasure(attacker, attack_id)
       tr_time = (100 + XAS_BA::TREASURE_ERASE_TIME * 60) - 20
+      tr_time = 9999999999999999999
       return if self.treasure_time > tr_time
       self.x = $game_player.x
       self.y = $game_player.y
@@ -2976,7 +3822,7 @@ module XRXS_BattlerAttachment
           self.battler.damage = XAS_WORD::REFLECT
           self.battler.damage_pop = true
           self.animation_id = XAS_ANIMATION::REFLECT_ANIMATION_ID
-          self.battler.invunerable_duration = 20
+#~           self.battler.invunerable_duration = 20
          return true
      end 
      return false     
@@ -3047,6 +3893,9 @@ module XRXS_BattlerAttachment
       if self.battler.dead?
          return false
       end   
+      if self.battler.no_damage_pop and self.battler.hp == 0
+         return false
+      end   
       if self.battler.invunerable_duration > 0
          return false
       end   
@@ -3057,12 +3906,12 @@ module XRXS_BattlerAttachment
          return false 
       end
       if self.action != nil and self.action.user_invincible
-         unless self.action.ally_damage and bullet.action.user == self.action.user
+         unless self.action.ally_damage and bullet.action.user == self.action.user and user.battler.state_suicide
              return false
          end
       end  
       unless bullet.action.all_damage 
-             if bullet.action.ally_damage 
+             if bullet.action.ally_damage or user.battler.state_suicide
                 if user.battler.is_a?(Game_Actor)
                    return false if self.battler.is_a?(Game_Enemy)
                 elsif user.battler.is_a?(Game_Enemy) 
@@ -3118,9 +3967,11 @@ module XRXS_BattlerAttachment
   #--------------------------------------------------------------------------      
   def execute_hit_effect(attacker,skill, bullet , user, tar_invu)
       shoot_effect_before_damage(skill, bullet, user)
-      execute_battler_skill_effect(attacker ,skill, user)
+      execute_battler_skill_effect(attacker ,skill, user)        
       if target_missed?(attacker)
-         self.battler.invunerable_duration = 30
+#~          p bullet.tool_effect == "Guide"
+         bullet.action.duration = 1 if bullet.tool_effect == "Guide"
+#~          self.battler.invunerable_duration = 0 #self.battler.knockback_duration
          return 
       end            
       execute_damage_pop(attacker,skill)
@@ -3445,6 +4296,37 @@ module XRXS_BattlerAttachment
      end  
  end  
  
+ #--------------------------------------------------------------------------
+ # ● Execute Damage Pop
+ #--------------------------------------------------------------------------       
+ def execute_suicide_damage_pop(attacker,skill = nil)
+     if skill != nil
+        return if skill.note =~ /<No Damage Pop>/
+        if skill.damage.to_mp?
+           dam = attacker.battler.result.mp_damage
+           attacker.battler.damage_type = "Mp"      
+        elsif skill.damage.to_hp?
+           dam = attacker.battler.result.hp_damage 
+           attacker.battler.damage_type = "Critical"  if attacker.battler.result.critical 
+        end   
+        if dam != nil 
+           if skill.damage.drain? or skill.damage.drain?
+              attacker.damage = -dam
+              attacker.damage_type = attacker.battler.damage_type 
+              attacker.damage_pop = true
+           end  
+           attacker.battler.damage = dam
+           attacker.battler.damage_pop = true
+        end
+     else
+        if attacker.battler.result.hp_damage != nil
+           attacker.battler.damage = attacker.battler.result.hp_damage 
+           attacker.battler.damage_type = "Critical" if attacker.battler.result.critical   
+           attacker.battler.damage_pop = true      
+        end   
+     end  
+ end  
+ 
 end   
 
 
@@ -3454,69 +4336,67 @@ end
 #■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
 
 
-#==============================================================================
-# ■ Window Skill List
-#==============================================================================
-class Window_SkillList < Window_Selectable
-  
-  #--------------------------------------------------------------------------
-  # ● Process OK
-  #--------------------------------------------------------------------------                   
-  alias x_skill_process_ok process_ok
-  def process_ok
-      return if can_equip_skill_action?
-      x_skill_process_ok
-  end
+#~ #==============================================================================
+#~ # ■ Window Skill List
+#~ #==============================================================================
+#~ class Window_SkillList < Window_Selectable
+#~   
+#~   #--------------------------------------------------------------------------
+#~   # ● Process OK
+#~   #--------------------------------------------------------------------------                   
+#~   alias x_skill_process_ok process_ok
+#~   def process_ok
+#~       return if can_equip_skill_action?
+#~       x_skill_process_ok
+#~   end
 
-  #--------------------------------------------------------------------------
-  # ● Can Equip Skill Action
-  #--------------------------------------------------------------------------                     
-  def can_equip_skill_action?
-      return false if $game_party.in_battle 
-      skill = @data[index]
-      if skill != nil and skill.note =~ /<Duration = (\d+)>/
-         @actor.skill_id = skill.id
-         Sound.play_equip
-         return true         
-      end
-      return false
-  end
-  
-end
+#~   #--------------------------------------------------------------------------
+#~   # ● Can Equip Skill Action
+#~   #--------------------------------------------------------------------------                     
+#~   def can_equip_skill_action?
+#~       return false if $game_party.in_battle 
+#~       skill = @data[index]
+#~       if skill != nil and skill.note =~ /<Duration = (\d+)>/
+#~          @actor.skill_id = skill.id
+#~          Sound.play_equip
+#~          return true         
+#~       end
+#~       return false
+#~   end
+#~   
+#~ end
 
-#==============================================================================
-# ■ Window Item List
-#==============================================================================
-class Window_ItemList < Window_Selectable
-  
-  #--------------------------------------------------------------------------
-  # ● Process OK
-  #--------------------------------------------------------------------------                   
-  alias x_item_process_ok process_ok
-  def process_ok
-      return if can_equip_item_action?
-      x_item_process_ok
-  end
+#~ #==============================================================================
+#~ # ■ Window Item List
+#~ #==============================================================================
+#~ class Window_ItemList < Window_Selectable
+#~   
+#~   #--------------------------------------------------------------------------
+#~   # ● Process OK
+#~   #--------------------------------------------------------------------------                   
+#~   alias x_item_process_ok process_ok
+#~   def process_ok
+#~       return if can_equip_item_action?
+#~       x_item_process_ok
+#~   end
 
-  #--------------------------------------------------------------------------
-  # ● Can Equip Item Action
-  #--------------------------------------------------------------------------                     
-  def can_equip_item_action?
-      return false if $game_party.in_battle 
-      item = @data[index]
-      if item != nil and item.is_a?(RPG::Item) and
-         item.note =~ /<Action ID = (\d+)>/
-         actor = $game_party.members[0]
-         actor.item_id = item.id
-         Sound.play_equip
-         return true         
-      end
-      return false
-  end
-  
-end
-
-
+#~   #--------------------------------------------------------------------------
+#~   # ● Can Equip Item Action
+#~   #--------------------------------------------------------------------------                     
+#~   def can_equip_item_action?
+#~       return false if $game_party.in_battle 
+#~       item = @data[index]
+#~       if item != nil and item.is_a?(RPG::Item) and
+#~          item.note =~ /<Action ID = (\d+)>/
+#~          actor = $game_party.members[0]
+#~          actor.item_id = item.id
+#~          Sound.play_equip
+#~          return true         
+#~       end
+#~       return false
+#~   end
+#~   
+#~ end
 
 #■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
 #■ BATTLER - INITIALIZE
@@ -3537,6 +4417,7 @@ class Game_Character < Game_CharacterBase
       update_battler_stop_movement
       update_battler_knockbacking
       update_battler_counter_action
+      @gain_duration = self.battler.gain_duration
       unless self.battler.hp == 0
           update_battler_cast_action    
           update_battler_move_speed if can_update_battler_move_speed?
@@ -3788,14 +4669,19 @@ class Game_Event < Game_Character
       else
          @enemy_id = 0
          if self.name =~ /<Enemy(\d+)>/i
-            @enemy_id = $1.to_i    
-         end           
+            @enemy_id = $1.to_i
+            $game_troop.events_respawn_time = [] if $game_troop.events_respawn_time == nil
+            $game_troop.events_respawn_time.each { | i |
+            self.erase if i[0] == @map_id && i[1] == self.id
+            $game_troop.events_respawn_time.delete(i) if i[0] == @map_id && i[1] == self.id && i[2] == -1 && !self.name =~ /<UNSPAWN>/i
+            }
+         end
          return if @enemy_id <= 0
          @battler = Game_Enemy.new(1, @enemy_id)
          self.force_update = true if self.battler.sensor_range >= 15         
       end  
   end
-    
+  
   #--------------------------------------------------------------------------
   # ● Battler Recheck
   #--------------------------------------------------------------------------      
@@ -3831,6 +4717,11 @@ class Game_Battler
   attr_accessor :attack_animation_id
   attr_accessor :ignore_guard
   attr_accessor :no_damage_pop
+  attr_accessor :hud_switch
+  attr_accessor :hud_swi
+  attr_accessor :gain_exp_act #new
+  attr_accessor :no_damage #new
+  attr_accessor :sensor_range_type #new
   
   #--------------------------------------------------------------------------
   # ● Initialize
@@ -3848,6 +4739,11 @@ class Game_Battler
       @attack_animation_id = 0
       @ignore_guard = false
       @no_damage_pop = false
+      @hud_switch = false
+      @hud_swi = false
+      @gain_exp_act = true #new
+      @no_damage = false #new
+      @sensor_range_type = 1
   end  
 end
 
@@ -3864,6 +4760,7 @@ class Game_Enemy < Game_Battler
       x_e2_initialize(index, enemy_id)
       enemy = $data_enemies[@enemy_id]
       setup_enemy_note(enemy)
+      self.gain_exp_act = true #new
   end  
   
   #--------------------------------------------------------------------------
@@ -3885,8 +4782,17 @@ class Game_Enemy < Game_Battler
       if enemy.note =~ /<Knockback Duration = (\d+)>/
          @knockback_duration = $1.to_i
       end       
+      if enemy.note =~ /<Collapse Duration = (\d+)>/
+         @collapse_duration_t = $1.to_i
+      end       
+      if enemy.note =~ /<TP = (\d+)>/  
+         self.tp = $1.to_i
+      end   
       if enemy.note =~ /<Ignore Guard>/ 
          @ignore_shield = true
+      end
+      if enemy.note =~ /<Surely Knockback>/
+         @surely_knockback = true
       end
       if enemy.note =~ /<Invunerable>/ 
          @invunerable = true
@@ -3903,6 +4809,38 @@ class Game_Enemy < Game_Battler
       if enemy.note =~ /<No Damage Pop>/  
          @no_damage_pop = true
       end   
+      if enemy.note =~ /<Hud Switch>/  
+         @hud_switch = true unless @hud_swi
+         @hud_swi = true
+      end   
+      if enemy.note =~ /<No Diagonal Move>/  
+         @diagonal = false
+      end   
+      if enemy.note =~ /<Sensor Range Area = (\w+)>/
+         case $1
+            when "CROSS"   
+               area = 7
+            when "WALL" 
+               area = 6        
+            when "FRONTRHOMBUS"  
+               area = 5
+            when "FRONTSQUARE"
+               area = 4
+            when "LINE"
+               area = 3
+            when "SQUARE"
+               area = 2               
+            else   
+               area = 1 
+         end     
+         @sensor_range_type = area
+      end   
+      if enemy.note =~ /<Always Attack = (\d+)>/
+        @always_attack = true
+        @always_attack_id = $1.to_i
+      else
+        @always_attack = false
+      end
       invunerable_actions_ids = XAS_BA_ENEMY::INVUNERABLE_ACTIONS[@enemy_id]
       if invunerable_actions_ids != nil
          @invunerable_actions = invunerable_actions_ids
@@ -3937,8 +4875,64 @@ module XRXS_EnemySensor
          sensor_area = $game_variables[XAS_BA::DEFAULT_SENSOR_RANGE_VARIABLE_ID]
       end
       sensor_area = -1 if cancel_sensor?
-      distance = ($game_player.x - self.x).abs + ($game_player.y - self.y).abs
-      enable   = (distance <= sensor_area)
+      enable = false
+#~       distance = ($game_player.x - self.x).abs + ($game_player.y - self.y).abs
+#~       enable   = (distance <= sensor_area)
+#~       enable = true if (($game_player.x - self.x).abs + ($game_player.y - self.y).abs <= sensor_area)
+      if self.battler.is_a?(Game_Enemy)
+      case self.battler.sensor_range_type
+            when 1 #RHOMBUS
+              enable = true if (($game_player.x - self.x).abs + ($game_player.y - self.y).abs <= sensor_area)
+            when 2 #SQUARE
+              enable = true if (($game_player.x - self.x).abs <= sensor_area and ($game_player.y - self.y).abs <= sensor_area)
+            when 3 #LINE
+              case self.direction
+                  when 2
+                    enable = true if (($game_player.x - self.x) == 0 and ($game_player.y - self.y) >= 0 and ($game_player.y - self.y) <= sensor_area)
+                  when 8
+                    enable = true if (($game_player.x - self.x) == 0 and ($game_player.y - self.y) <= 0 and ($game_player.y - self.y) >= -sensor_area)
+                  when 6
+                    enable = true if (($game_player.y - self.y) == 0 and ($game_player.x - self.x) >= 0 and ($game_player.x - self.x) <= sensor_area)
+                  when 4
+                    enable = true if (($game_player.y - self.y) == 0 and ($game_player.x - self.x) <= 0 and ($game_player.x - self.x) >= -sensor_area)
+              end
+            when 4  #FRONT SQUARE   
+              case self.direction
+                 when 2
+                    enable = true if (($game_player.x - self.x).abs <= range and ($game_player.y - self.y) >= 0 and ($game_player.y - self.y).abs <= sensor_area)
+                 when 4
+                    enable = true if (($game_player.x - self.x).abs <= range and ($game_player.x - self.x) <= 0 and ($game_player.y - self.y).abs <= sensor_area)  
+                 when 6
+                    enable = true if (($game_player.x - self.x).abs <= range and ($game_player.x - self.x) >= 0 and ($game_player.y - self.y).abs <= sensor_area)
+                 when 8
+                    enable = true if (($game_player.x - self.x).abs <= range and ($game_player.y - self.y) <= 0 and ($game_player.y - self.y).abs <= sensor_area)
+              end              
+            when 5  #FRONT RHOMBUS     
+              case self.direction
+                  when 2
+                    enable = true if (($game_player.x - self.x).abs + ($game_player.y - self.y).abs <= sensor_area and ($game_player.y - self.y) >= 0)
+                  when 8
+                    enable = true if (($game_player.x - self.x).abs + ($game_player.y - self.y).abs <= sensor_area and ($game_player.y - self.y) <= 0)
+                  when 6
+                    enable = true if (($game_player.x - self.x).abs + ($game_player.y - self.y).abs <= sensor_area and ($game_player.x - self.x) >= 0)
+                  when 4
+                    enable = true if (($game_player.x - self.x).abs + ($game_player.y - self.y).abs <= sensor_area and ($game_player.x - self.x) <= 0)
+              end          
+            when 6  #WALL
+              case self.direction
+                 when 2
+                    enable = true if (($game_player.x - self.x).abs <= sensor_area and ($game_player.y - self.y) == 0 )
+                 when 4
+                    enable = true if (($game_player.y - self.y).abs <= sensor_area and ($game_player.x - self.x) == 0)  
+                 when 6
+                    enable = true if (($game_player.y - self.y).abs <= sensor_area and ($game_player.x - self.x) == 0)
+                 when 8
+                    enable = true if (($game_player.x - self.x).abs <= sensor_area and ($game_player.y - self.y) == 0)
+               end  
+            when 7 #CROSS
+                 enable = true if (($game_player.x - self.x).abs <= sensor_area and ($game_player.y - self.y) == 0)
+                 enable = true if (($game_player.y - self.y).abs <= sensor_area and ($game_player.x - self.x) == 0)  
+            end
       key = [$game_map.map_id, self.id, XAS_BA::SENSOR_SELF_SWITCH]
       last_enable = $game_self_switches[key]
       last_enable = false if last_enable == nil
@@ -3950,6 +4944,7 @@ module XRXS_EnemySensor
          $game_self_switches[key] = enable
          self.refresh
       end
+    end
   end
   
   #--------------------------------------------------------------------------
@@ -3961,6 +4956,7 @@ module XRXS_EnemySensor
       return false if self.erased 
       return false if self.stop
       return false if self.knockbacking?
+      return false if @event.name =~ /<Sensor(\d+)>/
       return true
   end
   
@@ -3982,6 +4978,10 @@ module XRXS_EnemySensor
   def cancel_sensor?  
       return false if self.battler == nil
       return true if self.battler.passive 
+     if self.battler.sensor_range < 15
+        return true if self.battler.state_invisible
+        return true if $game_player.battler.state_invisible
+     end
       return false
   end
   
@@ -4182,7 +5182,7 @@ class Game_Character < Game_CharacterBase
   def blow(d, power = 1)
       return unless can_blow? 
       jump(0,0)
-      self.battler.invunerable_duration = 30 if self.battler.invunerable_duration <= 0
+      self.battler.invunerable_duration = self.battler.knockback_duration if self.battler.invunerable_duration <= 0
       if self.is_a?(Game_Event)
          @collision_attack = false  
       end
@@ -4210,7 +5210,7 @@ class Game_Character < Game_CharacterBase
   def can_stop_battler_movement?
       return false if self.dead?   
       return true if self.battler.state_sleep
-      return true if self.battler.state_stop
+      return false if self.battler.state_stop
       return false
   end  
   
@@ -4250,7 +5250,7 @@ class Game_Character < Game_CharacterBase
   #--------------------------------------------------------------------------              
   def update_battler_attacking 
       return unless can_update_attacking?
-      make_pose("_Atk", 2) 
+      make_pose("_ATK", 2) 
   end
 
   #--------------------------------------------------------------------------
@@ -4403,25 +5403,57 @@ module XRXS_BattlerAttachment
      if attacker.state_seal_attack or attacker.state_mute
         attacker.damage = XAS_WORD::SEAL
         attacker.damage_pop = true
-        self.battler.invunerable_duration = 30
+        self.battler.invunerable_duration = self.battler.knockback_duration
         return true 
      end 
      return false
  end   
  
  #--------------------------------------------------------------------------
- # ● Execute Attack Damage
+ # ● Execute Attack Damage 
+ #    ※ 몬스터가 기본공격으로 피격
  #--------------------------------------------------------------------------       
  def execute_attack_damage(attacker)
      #if self.battler.agi > (rand(attacker.battler.agi) * 2)
      #   self.battler.result.missed = true
      #   return
      #end
-     damage = ((attacker.battler.atk * 4) - (self.battler.def * 2)).truncate
-     damage = 0 if damage < 0
-     self.battler.result.hp_damage = damage
-     #self.battler.result.critical   
-     self.battler.hp -= damage.abs
+    unless attacker.battler.state_suicide
+      damage = (attacker.battler.atk - self.battler.def).truncate
+      damage += rand(attacker.battler.luk * 2).truncate - attacker.battler.luk.truncate
+      damage = 0 if damage < 0
+      if self.battler.state_life && self.battler.hp <= damage
+        damage = self.battler.hp - 1
+      end
+      if attacker.battler.state_drain
+        attacker.battler.hp += damage
+        attacker.battler.damage = -damage
+        attacker.battler.damage_pop = true
+      end
+      self.battler.result.hp_damage = damage
+      #self.battler.result.critical   
+      self.battler.hp -= damage.abs
+      if self.battler.hp < ( self.battler.mhp * XAS_BA_ENEMY::LOWHP / 100 )
+        $game_map.screen.start_flash(Color.new(255, 0, 0), 8)
+      else
+        $game_map.screen.start_flash(Color.new(255, 0, 0, 50), 8)
+      end
+      self.battler.attack_apply( attacker.battler )
+    else
+      damage = (attacker.battler.atk - attacker.battler.def).truncate
+      damage += rand(attacker.battler.luk * 2).truncate - attacker.battler.luk.truncate
+      damage = 0 if damage < 0
+      if attacker.battler.state_life && attacker.battler.hp <= damage
+        damage = attacker.battler.hp - 1
+      end
+      if attacker.battler.state_drain
+        attacker.battler.hp += damage
+        attacker.battler.result.hp_damage = damage
+      end
+      attacker.battler.result.hp_damage = damage
+      attacker.battler.hp -= damage.abs
+      attacker.battler.attack_apply( attacker.battler )
+    end
  end
  
  #--------------------------------------------------------------------------
@@ -4431,10 +5463,10 @@ module XRXS_BattlerAttachment
      execute_attack_effect_before_damage(attacker)
      execute_attack_damage(attacker)
      if target_missed?(attacker)
-        self.battler.invunerable_duration = 30
+#~         self.battler.invunerable_duration = self.battler.knockback_duration
         return 
-     end
-     execute_damage_pop(attacker)
+      end
+     attacker.battler.state_suicide ? execute_suicide_damage_pop(attacker) : execute_damage_pop(attacker)
      execute_attack_effect_after_damage(attacker) if can_check_after_attack_effect?(attacker)   
      execute_state_effect(nil, attacker, nil)    
      self.battler.invunerable_duration = 20 + XAS_BA::DEFAULT_KNOCK_BACK_DURATION
@@ -4471,6 +5503,41 @@ module XRXS_BattlerAttachment
  
  end 
  
+#--------------------------------------------------------------------------
+# ● Attack Drain Effect
+#--------------------------------------------------------------------------
+def attack_drain_effect(attacker)
+    return if attacker.battler.state_drain == false
+    drain_state_damage = self.battler.damage.to_i * XAS::DRAIN_RECOVER_PERC / 100 
+    drain_state_damage = 1 if drain_state_damage  < 1
+    attacker.battler.damage = -drain_state_damage
+    attacker.battler.damage_pop = true         
+    attacker.battler.hp += drain_state_damage           
+end
+
+#--------------------------------------------------------------------------  
+# ● Attack Blow Effect 
+#--------------------------------------------------------------------------
+def attack_blow_effect(attacker)
+    return if self.battler.is_a?(Game_Actor) and not
+          ($game_temp.hook_x == 0 and $game_temp.hook_y == 0)    
+    unless attacker.battler.e_ignore_hero_shield
+           return if self.action != nil
+    end
+    unless self.action != nil and self.is_a?(Game_Player) and not
+   (self.battler.state_sleep or self.battler.stop)      
+     if self.battler.damage.to_i > 0
+        attack_drain_effect(attacker)                  
+        attack_blow_pw = XAS_BA_ENEMY::ATTACK_BLOW_POWER[attacker.battler.id] 
+        if attack_blow_pw != nil 
+           self.blow(attacker.direction, attack_blow_pw) 
+        else
+           self.blow(attacker.direction, 1)       
+        end
+     end      
+   end
+end
+ 
 end
 
 #===============================================================================
@@ -4495,6 +5562,35 @@ class Game_Player < Game_Character
           end
       end
   end
+  
+  #-----------------------------------------------------------------------------
+  # ● Check Event Trigger Touch Front
+  #-----------------------------------------------------------------------------
+  alias xrxs64c_move_straight move_straight
+  def move_straight(d, turn_ok = true)
+    xrxs64c_move_straight( d, turn_ok )
+    for event in $game_map.events.values
+      next unless event.collision_attack
+      if ( event.battler != nil ) && ( ( event.x - x ).abs + ( event.y - y ).abs <= event.body_size )
+        $game_player.attack_effect( event )
+      end
+    end
+  end
+  
+  #-----------------------------------------------------------------------------
+  # ● Check Event Trigger Touch Region
+  #-----------------------------------------------------------------------------
+  alias xrxs64c_move_toward_player move_toward_player
+  def move_toward_player
+    for event in $game_map.events.values
+      next unless event.collision_attack
+      if ( event.battler != nil ) && ( event.x == x ) && ( event.y == y )
+        $game_player.attack_effect( event )
+      end
+    end
+    xrxs64c_move_toward_player
+  end
+  
 end
 
 #===============================================================================
@@ -4516,6 +5612,33 @@ class Game_Event < Game_Character
        $game_player.attack_effect(self)
     end
   end
+  
+  #-----------------------------------------------------------------------------
+  # ● Check Event Trigger Touch Front
+  #-----------------------------------------------------------------------------
+  alias xrxs64c_move_straight move_straight
+  def move_straight( d, turn_ok = true )
+    xrxs64c_move_straight( d, turn_ok )
+    if self.collision_attack
+      if ( self.battler != nil ) && ( ( x - $game_player.x ).abs + ( y - $game_player.y ).abs <= self.body_size )
+        $game_player.attack_effect( self )
+      end
+    end
+  end
+  
+  #-----------------------------------------------------------------------------
+  # ● Check Event Trigger Touch Region
+  #-----------------------------------------------------------------------------
+  alias xrxs64c_move_toward_player move_toward_player
+  def move_toward_player
+    if self.collision_attack
+      if ( self.battler != nil ) && ( x == $game_player.x ) && ( y == $game_player.y )
+        $game_player.attack_effect( self )
+      end
+    end
+    xrxs64c_move_toward_player
+  end
+  
 end
 
 
@@ -4534,6 +5657,7 @@ class Game_Character < Game_CharacterBase
   attr_accessor :base_move_speed
   attr_accessor :dash_move_speed
   attr_accessor :move_speed
+#~   attr_accessor :agi_speed
   
  #--------------------------------------------------------------------------
  # ● Initialize
@@ -4542,6 +5666,7 @@ class Game_Character < Game_CharacterBase
   def initialize
       @base_move_speed = BASE_MOVE_SPEED
       @dash_move_speed = 0
+      @agi_speed = 0
       x_move_speed_initialize
   end  
  
@@ -4553,7 +5678,12 @@ class Game_Character < Game_CharacterBase
       sp1 = @base_move_speed
       sp2 = @dash_move_speed
       sp3 = self.battler.state_move_speed
-      @move_speed = (sp1 + sp2 + sp3)
+      if self.is_a?(Game_Player)
+      sp4 = $game_party.members[0].agi.to_f / 100
+      else
+      sp4 = 0
+      end
+      @move_speed = (sp1 + sp2 + sp3 + sp4)
   end
   
  #--------------------------------------------------------------------------
@@ -4610,9 +5740,8 @@ class Game_Character < Game_CharacterBase
       return true if @force_action_times > 0
       return false
   end  
-  
+        
 end  
-
 
 #==============================================================================
 # ■ Game_Event
@@ -4656,7 +5785,7 @@ end
 #==============================================================================
 # ■ Game_Battler
 #==============================================================================
-class Game_Battler
+class Game_Battler < Game_BattlerBase
 
   attr_accessor :state_move_speed
   attr_accessor :state_stop
@@ -4674,7 +5803,20 @@ class Game_Battler
   attr_accessor :state_seal_attack 
   attr_accessor :state_seal_skill 
   attr_accessor :state_seal_item 
+  attr_accessor :state_puppet
+  attr_accessor :state_suicide
   attr_accessor :state_reflect
+  attr_accessor :state_death_count
+  attr_accessor :state_life
+  attr_accessor :state_drain
+  attr_accessor :state_berserk
+  attr_accessor :state_confuse
+  attr_accessor :state_c_confuse
+  attr_accessor :state_ct_up
+  attr_accessor :state_ct_down
+  attr_accessor :state_invisible
+  attr_accessor :state_blind
+  attr_accessor :state_muddy
   
  #--------------------------------------------------------------------------
  # ● Initialize
@@ -4696,22 +5838,49 @@ class Game_Battler
       @state_seal_attack = false 
       @state_seal_skill = false 
       @state_seal_item = false
+      @state_puppet = false 
+      @state_suicide = false 
       @state_reflect = false
+      @state_death_count = true
+      @state_life = false
+      @state_drain = false
+      @state_berserk = false
+      @state_confuse = false
+      @state_c_confuse = false
+      @state_ct_up = false
+      @state_ct_down = false
+      @state_invisible = false
+      @state_blind = false
+      @state_muddy = false
       x_state_initialize
   end
-    
+  #--------------------------------------------------------------------------
+  # ● 스테이트의 부가 가능 판정
+  #--------------------------------------------------------------------------
+  def state_addable?(state_id)
+    alive? && $data_states[state_id] && !state_resist?(state_id) &&
+      !state_restrict?(state_id) #!state_removed?(state_id) && 
+  end
  #--------------------------------------------------------------------------
  # ● Add State
  #--------------------------------------------------------------------------    
   alias x_add_state add_state
   def add_state(state_id)
-      unless @states.include?(state_id)
+#~       unless @states.include?(state_id)
+      unless @no_damage_pop
           state = $data_states[state_id] 
+          if state.note =~ /<Blind>/
+            $game_map.screen.start_tone_change(Tone.new(-255, -255, -255), 60)
+          elsif state.note =~ /<Muddy>/
+            $game_map.screen.start_tone_change(Tone.new(-100, -100, -100), 60)
+          end
           xas_add_state(state)
-      end        
+#~       add_new_state(state_id) unless state?(state_id)
+#~       reset_state_counts(state_id)
+#~       @result.added_states.push(state_id).uniq!
       x_add_state(state_id)
+      end   
   end 
-  
  #--------------------------------------------------------------------------
  # ● Xas Add State
  #--------------------------------------------------------------------------      
@@ -4721,7 +5890,7 @@ class Game_Battler
       @state_loop_speed[state.id] = $data_states[state.id].max_turns 
       execute_damage_state(state,0)
   end      
- 
+
  #--------------------------------------------------------------------------
  # ● Remove State
  #--------------------------------------------------------------------------        
@@ -4729,27 +5898,31 @@ class Game_Battler
   def remove_state(state_id)
       if state?(state_id)
          state = $data_states[state_id] 
+         if state.note =~ /<Blind>/ || state.note =~ /<Muddy>/
+           $game_map.screen.start_tone_change(Tone.new(0, 0, 0), 60)
+         end
          xas_remove_state(state)
       end  
       x_remove_state(state_id)      
   end    
-    
+  
  #--------------------------------------------------------------------------
  # ● XAS Remove State
  #--------------------------------------------------------------------------         
   def xas_remove_state(state)
+      @state_duration[state.id] = 0
       @state_duration.delete(state.id)  
       @state_loop_effect_time.delete(state.id)  
       @state_loop_speed.delete(state.id)
       execute_damage_state(state,1)
   end  
-
  #--------------------------------------------------------------------------
  # ● Execute_Damage_State
  #--------------------------------------------------------------------------           
   def execute_damage_state(state,type)
       return unless XAS_DAMAGE_POP::DAMAGE_STATE_POP
       return unless XAS_WORD::ENABLE_WORD
+      return unless state_addable?(state.id)
       return if state == nil or state.id == 1
       case type
          when 0
@@ -4801,12 +5974,25 @@ class Game_Character < Game_CharacterBase
      self.battler.state_fast = false
      self.battler.state_mute = false
      self.battler.state_sleep = false
+     self.battler.state_puppet = false
+     self.battler.state_suicide = false
      self.battler.state_invunerable = false
      self.battler.state_seal_attack = false
      self.battler.state_seal_skill = false
      self.battler.state_seal_item = false 
      self.battler.state_reflect = false
      self.battler.state_move_speed = 0
+     self.battler.state_death_count = true
+     self.battler.state_life = false
+     self.battler.state_drain = false
+     self.battler.state_berserk = false
+     self.battler.state_confuse = false
+     self.battler.state_c_confuse = false
+     self.battler.state_ct_up = false
+     self.battler.state_ct_down = false
+     self.battler.state_invisible = false
+     self.battler.state_blind = false
+     self.battler.state_muddy = false
  end  
  
  #--------------------------------------------------------------------------
@@ -4834,6 +6020,13 @@ class Game_Character < Game_CharacterBase
      if state.note =~ /<Sleep>/  
         self.battler.state_sleep = true
      end
+     if state.note =~ /<Puppet>/  
+        self.battler.state_puppet = true
+        move_random unless self.moving?
+     end
+     if state.note =~ /<Suicide>/  
+        self.battler.state_suicide = true
+     end
      if state.note =~ /<Invincible>/   
         self.battler.state_invunerable = true
      end  
@@ -4848,7 +6041,43 @@ class Game_Character < Game_CharacterBase
       end
      if state.note =~ /<Reflect>/
         self.battler.state_reflect = true
-     end         
+     end
+     if state.note =~ /<Death Count>/
+        self.battler.state_death_count = false
+     end
+     if state.note =~ /<Life>/
+        self.battler.state_life = true
+     end
+     if state.note =~ /<Drain>/
+        self.battler.state_drain = true
+     end
+     if state.note =~ /<Berserk>/
+        self.battler.state_berserk = true
+     end
+     if state.note =~ /<Confuse>/
+        self.battler.state_confuse = true
+#~         $game_player.move_by_input_mirror
+#~         move_mirror(Input.dir4) if Input.dir4 > 0
+#~         move_straight((5 - Input.dir4) * 2 + Input.dir4) if Input.dir4 > 0
+     end
+     if state.note =~ /<Random Confuse>/
+        self.battler.state_c_confuse = true
+     end
+     if state.note =~ /<CT Up>/
+        self.battler.state_ct_up = true
+     end
+     if state.note =~ /<CT Down>/
+        self.battler.state_ct_down = true
+     end
+     if state.note =~ /<Invisible>/
+        self.battler.state_invisible = true
+     end
+     if state.note =~ /<Blind>/
+        self.battler.state_blind = true
+     end
+     if state.note =~ /<Muddy>/
+        self.battler.state_muddy = true
+     end
  end
  
  #--------------------------------------------------------------------------
@@ -4866,6 +6095,10 @@ class Game_Character < Game_CharacterBase
         end    
         execute_states_effects(state)          
      end          
+  if state.note =~ /<Life>/ && self.battler.hp == 1
+    self.animation_id = XAS::RELIFE_ANIMATION_ID
+    self.battler.remove_state(20)
+  end
  end
  
  #--------------------------------------------------------------------------
@@ -4875,15 +6108,61 @@ class Game_Character < Game_CharacterBase
      if state.note =~ /<Slip Damage = (\S+)>/
         execute_state_slip_damage($1.to_i) 
      end  
+   if state.note =~ /<Death Count>/
+      self.battler.state_duration[state.id] -= 45
+      death_number = self.battler.state_duration[state.id] / 100
+       if death_number > 0   
+         display_damage(XAS::DEATHCOUNT_TEXT_COUNT.to_s + death_number.abs.truncate.to_s) 
+      else  
+         self.battler.hp = 0 if self.battler.is_a?(Game_Enemy)  
+         SceneManager.goto(Scene_Gameover) if self.battler.is_a?(Game_Actor)  
+#~          if self.battler.is_a?(Game_Actor)
+#~            if self.battler.state_life #and self.battler.hp > 1
+#~              self.battler.hp = 1
+#~            else
+#~              SceneManager.goto(Scene_Gameover)
+#~            end
+#~          end
+      end
+   end
+     if state.note =~ /<Slip MP Damage = (\S+)>/
+        execute_state_mp_slip_damage($1.to_i) 
+     end  
  end
  
+ #--------------------------------------------------------------------------
+ # ● Display Damage
+ #--------------------------------------------------------------------------    
+ def display_damage(value) 
+     self.battler.damage = value
+     self.battler.damage_pop = true   
+ end  
+
  #--------------------------------------------------------------------------
  # ● Execute States Slip Damage
  #--------------------------------------------------------------------------        
  def execute_state_slip_damage(damage)
      damage = 1 if damage == nil
-     damage_slip = self.battler.mhp * damage / 100
+     damage_slip = damage #self.battler.mhp * damage / 100
      self.battler.hp -= damage_slip
+     self.battler.damage = damage_slip
+     self.battler.damage_pop = true
+     return if damage <= 0
+     if self.battler.hp < ( self.battler.mhp * XAS_BA_ENEMY::LOWHP / 100 )
+       $game_map.screen.start_flash(Color.new(255, 0, 0), 8)
+     else
+       $game_map.screen.start_flash(Color.new(255, 0, 0, 50), 8)
+     end
+ end
+ 
+ #--------------------------------------------------------------------------
+ # ● Execute States Slip Damage
+ #--------------------------------------------------------------------------        
+ def execute_state_mp_slip_damage(damage)
+     damage = 1 if damage == nil
+     damage_slip = damage #self.battler.mmp * damage / 100
+     self.battler.mp -= damage_slip
+     self.battler.damage_type = "Mp"
      self.battler.damage = damage_slip
      self.battler.damage_pop = true
  end
@@ -4908,7 +6187,6 @@ class Game_Character < Game_CharacterBase
       return false if self.battler.state_duration == []
       return true
   end
-
  #--------------------------------------------------------------------------
  # ● Update State String Pop
  #--------------------------------------------------------------------------       
@@ -4921,23 +6199,24 @@ class Game_Character < Game_CharacterBase
          self.battler.state_string = ""
       end  
   end  
+  
 end  
 
 #==============================================================================
 # ■ Game_Party
 #==============================================================================
-class Game_Party < Game_Unit
+#~ class Game_Party < Game_Unit
 
  #--------------------------------------------------------------------------
  # ● On Player Walk
  #--------------------------------------------------------------------------        
- alias x_state_on_player_walk on_player_walk
- def on_player_walk
-     return if XAS_SYSTEM::STATE_SYSTEM
-     x_state_on_player_walk
- end 
+#~  alias x_state_on_player_walk on_player_walk
+#~  def on_player_walk
+#~      return if XAS_SYSTEM::STATE_SYSTEM
+#~      x_state_on_player_walk
+#~  end 
  
-end 
+#~ end 
 
 
 
@@ -4954,7 +6233,7 @@ class Game_Event < Game_Character
   #--------------------------------------------------------------------------
   # ● Shoot Chance
   #--------------------------------------------------------------------------            
-  def shoot_chance(action_id,perc)
+  def shoot_chance(action_id, perc)
       return if self.battler == nil 
       if perc >= rand(100)
          shoot(action_id)
@@ -4968,6 +6247,7 @@ class Game_Event < Game_Character
       return if self.battler == nil 
       self.battler.guard = enable
   end  
+  
   
   #--------------------------------------------------------------------------
   # ● Touch Attack
@@ -4997,7 +6277,624 @@ class Game_Event < Game_Character
       action_id = random_id[rand(random_id.size)]
       self.shoot(action_id)
   end      
-  
+
+  #--------------------------------------------------------------------------
+  # ● Wait
+  #--------------------------------------------------------------------------             
+  def wait(dur)
+      @wait_count = dur
+  end      
+
+  #--------------------------------------------------------------------------
+  # ● Rand Method
+  #--------------------------------------------------------------------------             
+  def rand_method(random_id = [])
+      return if self.battler == nil 
+      return if random_id == []
+      random_id[rand(random_id.size)]
+  end     
+
+#■XP■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+ #--------------------------------------------------------------------------
+ # ● HP Shoot
+ #--------------------------------------------------------------------------
+  def hp_shoot(hp_high, hp_low, perc)
+    return if self.battler == nil
+    if rand(100) <= perc
+      lowhp = self.battler.mhp * XAS_BA_ENEMY::LOWHP / 100
+      if self.battler.hp >= lowhp
+        shoot(hp_high)
+      else
+        shoot(hp_low)
+      end
+    end
+  end
+ #--------------------------------------------------------------------------
+ # ● Lowhp Shoot
+ #--------------------------------------------------------------------------
+  def lowhp_shoot(action_id, perc)
+      return if self.battler == nil
+      if rand(100) <= perc
+        lowhp = self.battler.mhp * XAS_BA_ENEMY::LOWHP / 100
+        if self.battler.hp < lowhp
+          shoot(action_id)
+        end
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● Shp Shoot
+ #--------------------------------------------------------------------------
+  def shp_shoot(hp, action_id, perc)
+      return if self.battler == nil
+      if rand(100) <= perc
+        shp = self.battler.mhp * hp / 100
+        if self.battler.hp < shp
+          shoot(action_id)
+        end
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● Fatal Shoot
+ #--------------------------------------------------------------------------
+  def fatal_shoot(action_id, perc)
+      return if self.battler == nil
+      if rand(100) <= perc
+          shoot(action_id)
+          self.battler.damage = self.battler.hp
+          self.battler.damage_pop = true
+          self.battler.gain_exp_gold = false
+          self.battler.hp -= self.battler.hp
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● Lowhp Fatal Shoot
+ #--------------------------------------------------------------------------
+  def lowhp_fatal_shoot(action_id, perc)
+      return if self.battler == nil
+      lowhp = self.battler.mhp * XAS_BA_ENEMY::LOWHP / 100
+      if self.battler.hp < lowhp
+          if rand(100) <= perc
+            shoot(action_id)
+            self.battler.damage = self.battler.hp
+            self.battler.damage_pop = true
+            self.battler.gain_exp_gold = false
+            self.battler.hp -= self.battler.hp
+          end
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● Lowhp Rand Shoot
+ #--------------------------------------------------------------------------
+  def lowhp_rand_shoot(random_id = [])
+      return if self.battler == nil
+      lowhp = self.battler.mhp * XAS_BA_ENEMY::LOWHP / 100
+      if self.battler.hp < lowhp
+        return if random_id == []
+        action_id = random_id[rand(random_id.size)]
+        self.shoot(action_id)
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● Escape
+ #--------------------------------------------------------------------------
+  def escape(hp, perc)
+      return if self.battler == nil
+      if rand(100) <= perc
+         self.battler.damage = XAS_ABS_SETUP::ESCAPE_TEXT
+         self.battler.damage_pop = true
+         self.collapse_done = true
+         $data_system.sounds[8].play
+         self.erase
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● LowHP Escape
+ #--------------------------------------------------------------------------
+  def lowhp_escape(perc)
+      return if self.battler == nil
+      if rand(100) <= perc
+        lowhp = self.battler.mhp * XAS_BA_ENEMY::LOWHP / 100
+        if self.battler.hp < lowhp
+            self.battler.damage = XAS_ABS_SETUP::ESCAPE_TEXT
+            self.battler.damage_pop = true
+            self.collapse_done = true
+            $data_system.sounds[8].play
+            self.erase
+        end
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● HP Guard
+ #--------------------------------------------------------------------------
+  def hp_guard(enable)
+      return if self.battler == nil
+      lowhp = self.battler.mhp * XAS_BA_ENEMY::LOWHP / 100
+      if self.battler.hp >= lowhp
+        self.battler.guard = enable
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● LowHP Guard
+ #--------------------------------------------------------------------------
+  def lowhp_guard(enable)
+      return if self.battler == nil
+      lowhp = self.battler.mhp * XAS_BA_ENEMY::LOWHP / 100
+      if self.battler.hp < lowhp
+        self.battler.guard = enable
+      else
+        self.battler.guard = false
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● Hit Reaction
+ #--------------------------------------------------------------------------
+  def hit_reaction(enable)
+      return if self.battler == nil
+      self.battler.no_knockback = enable
+  end
+ #--------------------------------------------------------------------------
+ # ● Hp Hit Reaction
+ #--------------------------------------------------------------------------
+  def hp_hit_reaction(enable)
+      return if self.battler == nil
+      lowhp = self.battler.mhp * XAS_BA_ENEMY::LOWHP / 100
+      if self.battler.hp >= lowhp
+        self.battler.no_knockback = enable
+      else
+        if enable == true
+          self.battler.no_knockback = false
+        else
+          self.battler.no_knockback = true
+        end
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● LowHP Switch
+ #--------------------------------------------------------------------------
+  def lowhp_switch(x, enable)
+    return if self.battler == nil
+    lowhp = self.battler.mhp * XAS_BA_ENEMY::LOWHP / 100
+    if self.battler.hp < lowhp
+      $game_switches[x] = enable
+      $game_map.need_refresh = true if $game_map.need_refresh == false
+      self.refresh
+    end
+  end
+ #--------------------------------------------------------------------------
+ # ● HP Switch
+ #--------------------------------------------------------------------------
+  def hp_switch(x, enable)
+      return if self.battler == nil
+      lowhp = self.battler.mhp * XAS_BA_ENEMY::LOWHP / 100
+      if self.battler.hp >= lowhp
+          $game_switches[x] = enable
+          $game_map.need_refresh = true
+      else
+         if enable == true
+          $game_switches[x] = false
+         else
+          $game_switches[x] = true
+         end
+         $game_map.need_refresh = true if $game_map.need_refresh == false
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● Anime
+ #--------------------------------------------------------------------------
+  def anime(anime_id)
+      self.animation_id = anime_id    
+  end
+ #--------------------------------------------------------------------------
+ # ● HP Anime
+ #--------------------------------------------------------------------------
+  def hp_anime(anime_id1, anime_id2)
+      return if self.battler == nil
+      lowhp = self.battler.mhp * XAS_BA_ENEMY::LOWHP / 100
+      if self.battler.hp >= lowhp
+          self.animation_id = anime_id1
+      else
+          self.animation_id = anime_id2     
+      end
+  end  
+ #--------------------------------------------------------------------------
+ # ● LowHP Anime
+ #--------------------------------------------------------------------------
+  def lowhp_anime(anime_id)
+      return if self.battler == nil
+      lowhp = self.battler.mhp * XAS_BA_ENEMY::LOWHP / 100
+      if self.battler.hp < lowhp
+         self.animation_id = anime_id
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● Speed
+ #--------------------------------------------------------------------------
+  def speed(x, perc = 100)
+      return if self.battler == nil 
+      if perc >= rand(100)
+         @base_move_speed = x
+      end  
+  end  
+ #--------------------------------------------------------------------------
+ # ● HP Speed
+ #--------------------------------------------------------------------------
+  def hp_speed(x1, x2)
+      lowhp = self.battler.mhp * XAS_BA_ENEMY::LOWHP / 100
+      if self.battler.hp >= lowhp
+        @base_move_speed = x1
+      else
+        @base_move_speed = x2
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● LowHP Speed
+ #--------------------------------------------------------------------------
+  def lowhp_speed(x)
+      lowhp = self.battler.mhp * XAS_BA_ENEMY::LOWHP / 100
+      if self.battler.hp < lowhp
+        @base_move_speed = x
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● Freq
+ #--------------------------------------------------------------------------  
+  def freq(x)
+      @move_frequency = x
+  end
+ #--------------------------------------------------------------------------
+ # ● Add State
+ #--------------------------------------------------------------------------
+  def add_state(states_id, perc)
+      return if self.battler == nil
+      if rand(100) <= perc
+         self.battler.add_state(states_id)
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● LowHP Add State
+ #--------------------------------------------------------------------------
+  def lowhp_add_state(states_id, perc)
+      return if self.battler == nil
+      lowhp = self.battler.mhp * XAS_BA_ENEMY::LOWHP / 100
+      if rand(100) <= perc
+         if self.battler.hp < lowhp
+            self.battler.add_state(states_id) 
+         end
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● Remove State
+ #--------------------------------------------------------------------------
+  def remove_state(states_id, perc)
+      return if self.battler == nil
+      if rand(100) <= perc
+        self.battler.remove_state(states_id)
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● LowHP Remove State
+ #--------------------------------------------------------------------------
+  def lowhp_remove_state(states_id, perc)
+      return if self.battler == nil
+      lowhp = self.battler.mhp * XAS_BA_ENEMY::LOWHP / 100
+      if rand(100) <= perc
+         if self.battler.hp < lowhp
+            self.battler.remove_state(states_id)
+         end
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● Self Damage
+ #--------------------------------------------------------------------------
+  def self_damage(damage, perc)
+      return if self.battler == nil
+      if rand(100) <= perc
+         self.battler.damage = damage.to_i
+         self.battler.damage_pop = true              
+         self.battler.hp -= damage
+         if self.battler.hp <= 0 
+#~             self.battler.exp = 0
+         end
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● Recover All
+ #--------------------------------------------------------------------------
+  def recover_all(perc)
+      return if self.battler == nil
+      if rand(100) <= perc
+         self.battler.damage = "전체 회복"
+         self.battler.damage_pop = true
+         self.battler.recover_all
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● LowHP Recover All
+ #--------------------------------------------------------------------------
+  def lowhp_recover_all(perc)
+      return if self.battler == nil
+      if rand(100) <= perc
+        lowhp = self.battler.mhp * XAS_BA_ENEMY::LOWHP / 100
+        if self.battler.hp < lowhp
+          self.battler.damage = "전체 회복"
+          self.battler.damage_pop = true
+          self.battler.recover_all
+        end
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● Text
+ #--------------------------------------------------------------------------
+  def text(tx, perc)
+      return if self.battler == nil
+      if rand(100) <= perc
+        self.battler.damage = tx.to_s
+        self.battler.damage_pop = true
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● Zoom
+ #--------------------------------------------------------------------------
+  def zoom(x, y)
+      return if self.battler == nil
+      @zoom_x = x
+      @zoom_y = y
+  end
+ #--------------------------------------------------------------------------
+ # ● Body Zoom
+ #--------------------------------------------------------------------------
+  def body_zoom(size)
+      return if self.battler == nil
+      self.battler.body_size = size
+  end
+ #--------------------------------------------------------------------------
+ # ● Hero LOWHP Shoot
+ #--------------------------------------------------------------------------
+  def hero_lowhp_shoot(action_id, perc)
+      actor = $game_party.members[0]
+      if rand(100) <= perc
+        lowhp = actor.mhp * XAS_BA_ENEMY::LOWHP / 100
+        if actor.hp < lowhp
+           shoot(action_id)
+        end
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● Hero LowHP Switch
+ #--------------------------------------------------------------------------
+  def hero_lowhp_switch(x, enable)
+      actor = $game_party.members[0]
+      lowhp = actor.mhp * XAS_BA_ENEMY::LOWHP / 100
+      if actor.hp < lowhp
+          $game_switches[x] = enable
+          $game_map.need_refresh = true if $game_map.need_refresh == false
+          self.refresh
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● Hero HP Shoot
+ #--------------------------------------------------------------------------
+  def hero_hp_shoot(hp_high, hp_low, perc)
+      actor = $game_party.members[0]
+    if rand(100) <= perc
+       lowhp = actor.mhp * XAS_BA_ENEMY::LOWHP / 100
+       if actor.hp >= lowhp
+          shoot(hp_high)
+       else
+          shoot(hp_low)
+       end
+    end
+  end
+ #--------------------------------------------------------------------------
+ # ● Hero HP Switch
+ #--------------------------------------------------------------------------
+  def hero_hp_switch(x, enable)
+      actor = $game_party.members[0]
+      lowhp = actor.mhp * XAS_BA_ENEMY::LOWHP / 100
+      if actor.hp >= lowhp
+          $game_switches[x] = enable
+          $game_map.need_refresh = true
+      else
+         if enable == true
+          $game_switches[x] = false
+         else
+          $game_switches[x] = true
+         end
+         $game_map.need_refresh = true if $game_map.need_refresh == false
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● Hero HP Anime
+ #--------------------------------------------------------------------------
+  def hero_hp_anime(anime_id1, anime_id2)
+      actor = $game_party.members[0]
+      lowhp = actor.mhp * XAS_BA_ENEMY::LOWHP / 100
+      if actor.hp >= lowhp
+        self.animation_id = anime_id1
+      else
+        self.animation_id = anime_id2
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● Hero Level Switch
+ #--------------------------------------------------------------------------
+  def hero_level_switch(x, level, enable)
+      actor = $game_party.members[0]
+      if actor.level >= level
+          $game_switches[x] = enable
+          $game_map.need_refresh = true if $game_map.need_refresh == false
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● Hero Level Shoot
+ #--------------------------------------------------------------------------
+  def hero_level_shoot(action_id1, action_id2, level, perc)
+      if rand(100) <= perc
+        actor = $game_party.members[0]
+        if actor.level >= level
+           shoot(action_id1)
+        else
+           shoot(action_id2)
+        end
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● Hero Level Speed
+ #--------------------------------------------------------------------------
+  def hero_level_speed(x1, x2, level)
+      actor = $game_party.members[0]
+      if actor.level >= level
+        @base_move_speed = x1
+      else
+        @base_move_speed = x2
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● Hero Level Escape
+ #--------------------------------------------------------------------------
+  def hero_level_escape(level, perc)
+      return if self.battler == nil
+      if rand(100) <= perc
+        actor = $game_party.members[0]
+        if actor.level >= level
+            self.battler.no_damage = true
+            self.battler.damage = "도주"
+            self.battler.damage_pop = true
+            self.collapse_done = true
+            $data_system.sounds[8].play
+            self.erase
+        end
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● Hero Level Guard
+ #--------------------------------------------------------------------------
+  def hero_level_guard(level, enable)
+      return if self.battler == nil
+      actor = $game_party.members[0]
+      if actor.level >= level
+        self.battler.guard = enable
+      else
+        self.battler.guard = false
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● Hero Level Hit Reaction
+ #--------------------------------------------------------------------------
+  def hero_level_hit_reaction(level, enable)
+      return if self.battler == nil
+      actor = $game_party.members[0]
+      if actor.level >= level
+        self.battler.no_knockback = enable
+      else
+        if enable == true
+          self.battler.no_knockback = false
+        else
+          self.battler.no_knockback = true
+        end
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● Hero Level Anime
+ #--------------------------------------------------------------------------
+  def hero_level_anime(anime_id1, anime_id2, level)
+      actor = $game_party.members[0]
+      if actor.level >= level
+        self.animation_id = anime_id1
+      else
+        self.animation_id = anime_id2
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● Jump Near
+ #--------------------------------------------------------------------------
+  def jump_near
+      if $game_player.x > self.x and
+         $game_player.y > self.y
+         range_x = $game_player.x - self.x
+         range_y = -1 + $game_player.y - self.y
+      elsif $game_player.x < self.x and
+         $game_player.y < self.y
+         range_x = $game_player.x - self.x
+         range_y = 1 + $game_player.y - self.y
+      elsif $game_player.x > self.x and
+         $game_player.y < self.y
+         range_x = $game_player.x - self.x
+         range_y = 1 + $game_player.y - self.y
+      elsif $game_player.x < self.x and
+         $game_player.y > self.y
+         range_x = $game_player.x - self.x
+         range_y = -1 + $game_player.y - self.y
+      elsif $game_player.x < self.x and
+         $game_player.y == self.y
+         range_x = 1 + $game_player.x - self.x
+         range_y = $game_player.y - self.y
+      elsif $game_player.x > self.x and
+         $game_player.y == self.y
+         range_x = -1 + $game_player.x - self.x
+         range_y = $game_player.y - self.y
+      elsif $game_player.x == self.x and
+         $game_player.y > self.y
+         range_x = $game_player.x - self.x
+         range_y = -1 + $game_player.y - self.y
+      elsif $game_player.x == self.x and
+         $game_player.y < self.y
+         range_x = $game_player.x - self.x
+         range_y = 1 + $game_player.y - self.y
+     else
+         range_x = 0
+         range_y = 0
+      end
+         jump(range_x,range_y) unless range_y == 0 and range_x == 0
+  end
+ #--------------------------------------------------------------------------
+ # ● Jump Org
+ #--------------------------------------------------------------------------
+  def jump_org
+      range_x = old_x - self.x
+      range_y = old_y - self.y
+      jump(range_x,range_y)
+  end      
+ #--------------------------------------------------------------------------
+ # ● SelfHP Shoot
+ #--------------------------------------------------------------------------
+  def selfhp_shoot(selfhp, selfhp_high, selfhp_low, perc)
+    return if self.battler == nil
+    if rand(100) <= perc
+      vhp = self.battler.mhp * selfhp / 100
+      if self.battler.hp >= vhp
+        shoot(selfhp_high)
+      else
+        shoot(selfhp_low)
+      end
+    end
+  end
+ #--------------------------------------------------------------------------
+ # ● LowSelfHP Shoot
+ #--------------------------------------------------------------------------
+  def lowselfhp_shoot(selfhp, action_id, perc)
+      return if self.battler == nil
+      if rand(100) <= perc
+        vhp = self.battler.mhp * selfhp / 100
+        if self.battler.hp < vhp
+          shoot(action_id)
+        end
+      end
+  end
+ #--------------------------------------------------------------------------
+ # ● LowSelfHP Switch
+ #--------------------------------------------------------------------------
+  def lowselfhp_switch(selfhp, x, enable)
+    return if self.battler == nil
+    vhp = self.battler.mhp * selfhp / 100
+    if self.battler.hp < vhp
+      $game_switches[x] = enable
+      $game_map.need_refresh = true if $game_map.need_refresh == false
+      self.refresh
+    end
+  end
+
 end
 
 
@@ -5015,7 +6912,7 @@ class Scene_Base
   # ● Check Gameover
   #--------------------------------------------------------------------------              
   def check_gameover
-      return unless $game_party.in_battle  
+      return unless $game_party.in_battle
       SceneManager.goto(Scene_Gameover) if $game_party.all_dead?
   end
 end  
@@ -5025,7 +6922,9 @@ end
 #===============================================================================
 class Game_Character < Game_CharacterBase
   attr_accessor :collapse_duration
-  attr_accessor :battler_visible
+  attr_accessor :collapse_duration_save
+  attr_accessor :collapse_duration
+  attr_accessor :gain_duration
   attr_writer   :opacity
   
   #--------------------------------------------------------------------------
@@ -5034,6 +6933,8 @@ class Game_Character < Game_CharacterBase
   alias x_collapse_initialize initialize
   def initialize
       @collapse_duration = 0
+      @collapse_duration_save = 0
+      @gain_duration = 0
       x_collapse_initialize
   end  
   
@@ -5102,6 +7003,7 @@ class Game_Character < Game_CharacterBase
          self.battler.defeated = true
          self.collapse_duration = 120
          self.knock_back_duration = 161
+         self.battler.defeated = false
          reset_battler_temp
       else   
          $game_temp.change_leader_wait_time = 0
@@ -5128,12 +7030,74 @@ class Game_Character < Game_CharacterBase
        self.through = true
        @knock_back_duration = 121
        enemy = $data_enemies[self.battler.enemy_id]
-       @collapse_duration = 120
+       if self.name =~ /<UNSPAWN>/
+         $game_troop.events_respawn_time[$game_troop.events_respawn_time.size] = [ @map_id, self.id, -1 ]
+       else
+        if enemy.note =~ /<리스폰 [:=] (\d+)>/
+          st = $1.to_i
+          unless self.name =~ /<NORESPAWN>/
+            $game_troop.events_respawn_time[$game_troop.events_respawn_time.size] = [ @map_id, self.id, ( st * 100 / 6 ).to_i ]
+          else
+            $game_troop.events_respawn_time[$game_troop.events_respawn_time.size] = [ @map_id, self.id, 0 ]
+          end
+        else
+          $game_troop.events_respawn_time[$game_troop.events_respawn_time.size] = [ @map_id, self.id, 0 ]
+        end
+       end
+       @collapse_duration = self.battler.collapse_duration_t
+       @collapse_duration_save = self.battler.collapse_duration_t
        execute_gain_exp_gold(enemy)  
        execute_active_switch(enemy)
        execute_defeated_animation(enemy)
        execute_defeated_sound_effect(enemy)
        execute_final_shoot(enemy)
+       
+       $game_system.quest.ids.each do |id|
+         data = $game_system.quest[id]
+         next unless data.visible
+         if data.playing #and !data.quest_clear? and !data.alarm
+           for i in 0...data.condition.size
+             if data.condition[i].type == 7 and data.condition[i].id == enemy.id
+                 $game_temp.event_window_data2 = [] if $game_temp.event_window_data2.nil?
+                 if $game_temp.event_window_data2 != []
+                   for j in 0...$game_temp.event_window_data2.size
+                     next if $game_temp.event_window_data2[ j ] == nil
+                     $game_temp.event_window_data2[ j ] = nil if ( $game_temp.event_window_data2[ j ].include?( "\ec[27]#{data.name}\ec[0] : \ec[10]#{enemy.name}" ) ) || ( !$game_temp.event_window_data2[ j ].include?( "\ec[18]" ) )
+                   end
+                   $game_temp.event_window_data2.compact!
+                 end
+                 $game_temp.event_window_data2.each do |j|
+                   $game_temp.event_window_data2.delete(j) if j.include?("\ec[27]#{data.name}\ec[0] : \ec[10]#{enemy.name}") or !j.include?("\ec[18]")
+                 end
+               if (defined?(DefeatCounter) ? $game_actors.defeat_all(enemy.id) : 0) == data.condition[i].num
+                 SceneManager.scene.event_window_add_text2(YEA::EVENT_WINDOW2::HEADER_TEXT+"\ec[24]#{data.name}\ec[0] : \ec[10]#{enemy.name} \ec[24]#{(defined?(DefeatCounter) ? $game_actors.defeat_all(enemy.id) : 0).to_s}\ec[0] / \ec[24]#{data.condition[i].num.to_s}\ec[0]"+YEA::EVENT_WINDOW2::CLOSER_TEXT)
+                 Audio.se_play("Audio/SE/Chime2", 100, 100)
+               elsif (defined?(DefeatCounter) ? $game_actors.defeat_all(enemy.id) : 0) < data.condition[i].num
+                 SceneManager.scene.event_window_add_text2(YEA::EVENT_WINDOW2::HEADER_TEXT+"\ec[27]#{data.name}\ec[0] : \ec[10]#{enemy.name} \ec[18]#{(defined?(DefeatCounter) ? $game_actors.defeat_all(enemy.id) : 0).to_s}\ec[0] / \ec[24]#{data.condition[i].num.to_s}\ec[0]"+YEA::EVENT_WINDOW2::CLOSER_TEXT)
+               end
+             elsif data.condition[i].type == 13 and data.condition[i].id == enemy.id
+                 $game_temp.event_window_data2 = [] if $game_temp.event_window_data2.nil?
+                 if $game_temp.event_window_data2 != []
+                   for j in 0...$game_temp.event_window_data2.size
+                     next if $game_temp.event_window_data2[ j ] == nil
+                     $game_temp.event_window_data2[ j ] = nil if ( $game_temp.event_window_data2[ j ].include?( "\ec[27]#{data.name}\ec[0] : \ec[10]#{enemy.name}" ) ) || ( !$game_temp.event_window_data2[ j ].include?( "\ec[18]" ) )
+                   end
+                   $game_temp.event_window_data2.compact!
+                 end
+                 $game_temp.event_window_data2.each do |j|
+                   $game_temp.event_window_data2.delete(j) if j.include?("\ec[27]#{data.name}\ec[0] : \ec[10]#{enemy.name}") or !j.include?("\ec[18]")
+                 end
+               if (defined?(DefeatCounter) ? $game_actors.defeat_all(enemy.id) - data.enemy_dn[enemy.id] : 0) == data.condition[i].num
+                 SceneManager.scene.event_window_add_text2(YEA::EVENT_WINDOW2::HEADER_TEXT+"\ec[24]#{data.name}\ec[0] : \ec[10]#{enemy.name} \ec[24]#{(defined?(DefeatCounter) ? $game_actors.defeat_all(enemy.id) - data.enemy_dn[enemy.id] : 0).to_s}\ec[0] / \ec[24]#{data.condition[i].num.to_s}\ec[0]"+YEA::EVENT_WINDOW2::CLOSER_TEXT)
+                 Audio.se_play("Audio/SE/Chime2", 100, 100)
+               elsif (defined?(DefeatCounter) ? $game_actors.defeat_all(enemy.id) - data.enemy_dn[enemy.id] : 0) < data.condition[i].num
+                 SceneManager.scene.event_window_add_text2(YEA::EVENT_WINDOW2::HEADER_TEXT+"\ec[27]#{data.name}\ec[0] : \ec[10]#{enemy.name} \ec[18]#{(defined?(DefeatCounter) ? $game_actors.defeat_all(enemy.id) - data.enemy_dn[enemy.id] : 0).to_s}\ec[0] / \ec[24]#{data.condition[i].num.to_s}\ec[0]"+YEA::EVENT_WINDOW2::CLOSER_TEXT)
+               end
+             end
+           end
+         end
+       end
+     
    end    
  
   #--------------------------------------------------------------------------
@@ -5151,7 +7115,11 @@ class Game_Character < Game_CharacterBase
       enemy.note  =~ /<Final Action ID = (\d+)>/ 
       action_id = $1.to_i
       return if action_id == nil
-      self.shoot(action_id)      
+      self.shoot(action_id) 
+      enemy.note  =~ /<Final Action Per = (\d+) - (\d+)>/ 
+      action_id = $1.to_i
+      return if action_id == nil
+      self.shoot(action_id) if rand(100) < $2.to_i
   end  
   
   #--------------------------------------------------------------------------
@@ -5311,10 +7279,28 @@ class Sprite_Character < Sprite_Base
   end
     
   #--------------------------------------------------------------------------
+  # ● Update Collapse Effects
+  #--------------------------------------------------------------------------            
+  def update_gain_effects
+    if @character.battler.is_a?(Game_Enemy)
+      @character.opacity = 0 if @character.battler.gain_duration == 120
+      if @character.gain_duration > 0
+        @character.opacity += 255 / 120
+        @character.battler.gain_duration -= 1
+      else
+        @character.opacity = 255
+      end
+    elsif @character.battler.is_a?(Game_Actor)
+      @character.opacity = 255
+    end
+  end
+    
+  #--------------------------------------------------------------------------
   # ● Can Collapse Effects
   #--------------------------------------------------------------------------              
   def can_collapse_effects?
       return false if @character.battler.is_a?(Game_Actor)
+      return true  if @character.battler.no_damage_pop and !@character.erased
       return false unless @character.dead? 
       return false if @character.erased    
       return true
@@ -5328,20 +7314,21 @@ class Sprite_Character < Sprite_Base
       exp_pop = @character.battler.exp
       gold_pop =@character.battler.gold
       case @character.collapse_duration
-           when 110
+           when @character.collapse_duration_save * 275 / 3 / 100
                 enemy = $data_enemies[@character.battler.enemy_id]
                 @character.make_treasure(enemy)       
-           when 80
+           when @character.collapse_duration_save * 2 / 3
              if exp_pop != 0
                 word = XAS_WORD::EXP
-                @character.battler.damage = word + " " + exp_pop.to_s
+                totalexp = ($game_party.leader.final_exp_rate * exp_pop).truncate
+                @character.battler.damage = word + " +" + totalexp.to_s
                 @character.battler.damage_pop = true
                 @character.battler.damage_type = "Exp"
              end  
-           when 40
+           when @character.collapse_duration_save / 3
              if gold_pop != 0
                 word = $data_system.currency_unit
-                @character.battler.damage = word + " " + gold_pop.to_s
+                @character.battler.damage = "+" + gold_pop.to_s + " " + word
                 @character.battler.damage_pop = true
                 @character.battler.damage_type = "Gold"
              end               
@@ -5353,7 +7340,11 @@ class Sprite_Character < Sprite_Base
   #--------------------------------------------------------------------------              
   def update_collapse_duration
       @character.collapse_duration -= 1
-      @character.opacity -= 2
+      if @character.battler.is_a?(Game_Actor)
+        @character.opacity -= 0
+      else
+        @character.opacity -= 2
+      end
       if @character.collapse_duration <= 0
          if @character.battler.is_a?(Game_Actor)
             SceneManager.goto(Scene_Gameover)
@@ -5391,6 +7382,25 @@ class Sprite_Character < Sprite_Base
                  @character.zoom_y += 0.2
                  @character.zoom_x -= 0.1 
              end
+          when 6
+             @character.zoom_y = 0
+             @character.zoom_x = 0            
+          when 7
+            case @character.collapse_duration
+                when 0..29
+                 @character.zoom_y += 0.01
+                 @character.zoom_x += 0.01
+                when 30..59
+                 @character.zoom_y -= 0.05
+                 @character.zoom_x -= 0.05
+                when 60..89
+                 @character.zoom_y += 0.3
+                 @character.zoom_x += 0.3
+                when 90..120
+                 @character.zoom_y -= 0.3
+                 @character.zoom_x -= 0.3
+              end
+             
       end
   end  
   
@@ -5413,23 +7423,85 @@ module XAS_BA_ItemDrop
   #--------------------------------------------------------------------------               
   def make_treasure(enemy)  
       treasure = nil      
-      return unless $game_player.passable?(self.x,self.y,0)
-      for di in enemy.drop_items
-           next if di.kind == 0
-           next if rand(di.denominator) != 0
-           if di.kind == 1
-              treasure = $data_items[di.data_id]
+      treasure_xy = nil      
+      treasure_r = nil      
+      dif = []
+      i=3
+      for drop in enemy.extra_drops
+           next if !$game_switches[drop.switch]
+           next if drop.kind == 0
+           if drop.drop_rate_size <= 0
+             next if rand(100) >= drop.drop_rate
+           else
+             next if rand(100 * ( 10 ** drop.drop_rate_size )) > drop.drop_rate * ( 10 ** drop.drop_rate_size )
+           end
+           if drop.kind == 1
+              treasure = $data_items[drop.data_id]
               tr_id = treasure.id
-           elsif di.kind == 2
-              treasure = $data_weapons[di.data_id]
+           elsif drop.kind == 2
+              treasure = $data_weapons[drop.data_id]
               tr_id = treasure.id
-           elsif di.kind == 3
-              treasure = $data_armors[di.data_id]
+           elsif drop.kind == 3
+              treasure = $data_armors[drop.data_id]
               tr_id = treasure.id
            end
-           break if treasure != nil 
-       end   
        if treasure != nil
+          command = RPG::MoveCommand.new
+          command.code = 14
+          command.parameters = [0,0]
+          route = RPG::MoveRoute.new
+          route.repeat = false
+          route.list = [command, RPG::MoveCommand.new]         
+          page = RPG::Event::Page.new
+          page.move_type = 3
+          page.move_route = route
+          page.move_frequency = 6
+          page.priority_type = 1
+          page.trigger = 1
+          page.through = true
+          xx = rand(i) - (i-1)/2
+          yy = rand(i) - (i-1)/2
+          while dif.size >= i**2
+            i+=2
+          end
+          while dif.include?([xx, yy]) and dif.size >= (i-2)**2 and  dif.size < i**2
+            xx = rand(i) - (i-1)/2
+            yy = rand(i) - (i-1)/2
+          end
+          dif.push([xx, yy])
+          event = RPG::Event.new(self.x, self.y)
+          event.pages = [page]       
+          event = RPG::Event.new(self.x, self.y)
+          token = Token_Event.new($game_map.map_id, event)
+          token.icon_name = treasure.icon_index
+          token.treasure = [drop.kind,tr_id]
+          token.treasure_time = 120 + XAS_BA::TREASURE_ERASE_TIME * 60
+          token.jump_high(xx,yy,5)
+          token.force_update = true
+          token.move_speed = 6
+          $game_map.add_token(token)
+       end  
+      end
+#-------------------------------------------------------------------------------
+      for drop_xy in enemy.extra_drops_xy
+           next if !$game_switches[drop_xy.switch]
+           next if drop_xy.kind == 0
+           if drop_xy.drop_rate_size <= 0
+             next if rand(100) > drop_xy.drop_rate
+           else
+             next if rand(100 * ( 10 ** drop_xy.drop_rate_size )) > drop_xy.drop_rate * ( 10 ** drop_xy.drop_rate_size )
+           end
+           if drop_xy.kind == 1
+              treasure_xy = $data_items[drop_xy.data_id]
+              tr_id_xy = treasure_xy.id
+           elsif drop_xy.kind == 2
+              treasure_xy = $data_weapons[drop_xy.data_id]
+              tr_id_xy = treasure_xy.id
+           elsif drop_xy.kind == 3
+              treasure_xy = $data_armors[drop_xy.data_id]
+              tr_id_xy = treasure_xy.id
+           end
+       if treasure_xy != nil
           command = RPG::MoveCommand.new
           command.code = 14
           command.parameters = [0,0]
@@ -5447,15 +7519,123 @@ module XAS_BA_ItemDrop
           event.pages = [page]       
           event = RPG::Event.new(self.x, self.y)
           token = Token_Event.new($game_map.map_id, event)
-          token.icon_name = treasure.icon_index
-          token.treasure = [di.kind,tr_id]
+          token.icon_name = treasure_xy.icon_index
+          token.treasure = [drop_xy.kind,tr_id_xy]
           token.treasure_time = 120 + XAS_BA::TREASURE_ERASE_TIME * 60
-          token.jump_high(0,0,20)
+          token.jump_high(drop_xy.px,drop_xy.py,5)
+          token.force_update = true
+          token.move_speed = 6
+          $game_map.add_token(token)
+       end  
+      end
+#-------------------------------------------------------------------------------
+      for drop_r in enemy.extra_drops_r
+           next if !$game_switches[drop_r.switch]
+           next if drop_r.kind == 0
+           if drop_r.drop_rate_size <= 0
+             next if rand(100) > drop_r.drop_rate
+           else
+             next if rand(100 * ( 10 ** drop_r.drop_rate_size )) > drop_r.drop_rate * ( 10 ** drop_r.drop_rate_size )
+           end
+           if drop_r.kind == 1
+              treasure_r = $data_items[drop_r.data_id]
+              tr_id_r = treasure_r.id
+           elsif drop_r.kind == 2
+              treasure_r = $data_weapons[drop_r.data_id]
+              tr_id_r = treasure_r.id
+           elsif drop_r.kind == 3
+              treasure_r = $data_armors[drop_r.data_id]
+              tr_id_r = treasure_r.id
+           end
+           break if treasure_r != nil 
+       end   
+#~        if treasure != nil #&& rand(100) < drop.drop_rate
+#~           command = RPG::MoveCommand.new
+#~           command.code = 14
+#~           command.parameters = [0,0]
+#~           route = RPG::MoveRoute.new
+#~           route.repeat = false
+#~           route.list = [command, RPG::MoveCommand.new]         
+#~           page = RPG::Event::Page.new
+#~           page.move_type = 3
+#~           page.move_route = route
+#~           page.move_frequency = 6
+#~           page.priority_type = 1
+#~           page.trigger = 1
+#~           page.through = true
+#~           event = RPG::Event.new(self.x, self.y)
+#~           event.pages = [page]       
+#~           event = RPG::Event.new(self.x, self.y)
+#~           token = Token_Event.new($game_map.map_id, event)
+#~           token.icon_name = treasure.icon_index
+#~           token.treasure = [drop.kind,tr_id]
+#~           token.treasure_time = 120 + XAS_BA::TREASURE_ERASE_TIME * 60
+#~           token.jump_high(0,0,rand(11)+15)
+#~           token.force_update = true
+#~           token.move_speed = 6
+#~           $game_map.add_token(token)
+#~        end  
+#~        if treasure1 != nil #&& rand(100) < drop1.drop_rate
+#~           command = RPG::MoveCommand.new
+#~           command.code = 14
+#~           command.parameters = [0,0]
+#~           route = RPG::MoveRoute.new
+#~           route.repeat = false
+#~           route.list = [command, RPG::MoveCommand.new]         
+#~           page = RPG::Event::Page.new
+#~           page.move_type = 3
+#~           page.move_route = route
+#~           page.move_frequency = 6
+#~           page.priority_type = 1
+#~           page.trigger = 1
+#~           page.through = true
+#~           event = RPG::Event.new(self.x - 1, self.y)
+#~           event.pages = [page]       
+#~           event = RPG::Event.new(self.x - 1, self.y)
+#~           token = Token_Event.new($game_map.map_id, event)
+#~           token.icon_name = treasure1.icon_index
+#~           token.treasure = [drop1.kind,tr_id1]
+#~           token.treasure_time = 120 + XAS_BA::TREASURE_ERASE_TIME * 60
+#~           token.jump_high(0,0,rand(11)+15)
+#~           token.force_update = true
+#~           token.move_speed = 6
+#~           $game_map.add_token(token)
+#~        end  
+       if treasure_r != nil #&& rand(100) < dropR.drop_rate
+          command = RPG::MoveCommand.new
+          command.code = 14
+          command.parameters = [0,0]
+          route = RPG::MoveRoute.new
+          route.repeat = false
+          route.list = [command, RPG::MoveCommand.new]         
+          page = RPG::Event::Page.new
+          page.move_type = 3
+          page.move_route = route
+          page.move_frequency = 6
+          page.priority_type = 1
+          page.trigger = 1
+          page.through = true
+          event = RPG::Event.new(self.x + ( rand(2) - 1 ), self.y + ( rand(2) - 1 ))
+          event.pages = [page]       
+          event = RPG::Event.new(self.x + ( rand(2) - 1 ), self.y + ( rand(2) - 1 ))
+          token = Token_Event.new($game_map.map_id, event)
+          token.icon_name = treasure_r.icon_index
+          token.treasure = [drop_r.kind,tr_id_r]
+          token.treasure_time = 120 + XAS_BA::TREASURE_ERASE_TIME * 60
+          token.jump_high(0,0,rand(11)+15)
           token.force_update = true
           token.move_speed = 6
           $game_map.add_token(token)
        end  
   end  
+  
+  #--------------------------------------------------------------------------
+  # ● ドロップアイテム取得率の倍率を取得
+  #--------------------------------------------------------------------------
+  def drop_item_rate
+    $game_party.drop_item_double? ? 2 : 1
+  end
+
 end
 
 #===============================================================================
@@ -5544,7 +7724,7 @@ class Game_Player < Game_Character
             Audio.se_play("Audio/SE/" + XAS_SOUND::ITEM_DROP , 100, 100)   
             event.erase
             if item != nil
-                if item.note =~ /<Drop Animation = (\d+)>/
+                if item.note =~ /<Drop Ani = (\d+)>/
                    self.animation_id = $1.to_i
                 end
                 if XAS_DAMAGE_POP::DAMAGE_ITEM_POP and name_pop
@@ -5553,7 +7733,45 @@ class Game_Player < Game_Character
                    self.battler.damage_type = "Item"
                 end                       
             end
-          end            
+            if item.note =~ /<Drop Gold = (\d+)>/
+            SceneManager.scene.event_window_add_text(YEA::EVENT_WINDOW::HEADER_TEXT+"\ec[24]획득\ec[0] : \ec[17]"+$1.to_i.to_s+"\ec[0] \ei[751]"+YEA::EVENT_WINDOW::CLOSER_TEXT)
+            else
+            SceneManager.scene.event_window_add_text(YEA::EVENT_WINDOW::HEADER_TEXT+"\ec[24]획득\ec[0] : "+"\ei[#{item.icon_index}] \ec[24]"+item.name+YEA::EVENT_WINDOW::CLOSER_TEXT)
+          end
+          
+            $game_system.quest.ids.each do |id|
+              data = $game_system.quest[id]
+              next unless data.visible
+              if data.playing #and !data.quest_clear? and !data.alarm
+                for i in 0...data.condition.size
+                  if data.condition[i].type == event.treasure[0] - 1 and data.condition[i].id == item.id
+                      $game_temp.event_window_data2 = [] if $game_temp.event_window_data2.nil?
+                      $game_temp.event_window_data2.each do |i|
+                        $game_temp.event_window_data2.delete(i) if i.include?("\ec[27]#{data.name}\ec[0] : \ei[#{item.icon_index}]") or !i.include?("\ec[18]")
+                      end
+                    if $game_party.item_number(item) == data.condition[i].num
+                      SceneManager.scene.event_window_add_text2(YEA::EVENT_WINDOW2::HEADER_TEXT+"\ec[24]#{data.name}\ec[0] : \ei[#{item.icon_index}] \ec[24]#{$game_party.item_number(item)}\ec[0] / \ec[24]#{data.condition[i].num.to_s}\ec[0]    "+YEA::EVENT_WINDOW2::CLOSER_TEXT)
+                      Audio.se_play("Audio/SE/Chime2", 100, 100) if $game_party.item_number(item) == data.condition[i].num
+                    elsif $game_party.item_number(item) < data.condition[i].num
+                      SceneManager.scene.event_window_add_text2(YEA::EVENT_WINDOW2::HEADER_TEXT+"\ec[27]#{data.name}\ec[0] : \ei[#{item.icon_index}] \ec[18]#{$game_party.item_number(item)}\ec[0] / \ec[24]#{data.condition[i].num.to_s}\ec[0]    "+YEA::EVENT_WINDOW2::CLOSER_TEXT)
+                    end
+                  elsif data.condition[i].type == 3 and item.note =~ /<Drop Gold = (\d+)>/
+                      $game_temp.event_window_data2 = [] if $game_temp.event_window_data2.nil?
+                      $game_temp.event_window_data2.each do |i|
+                        $game_temp.event_window_data2.delete(i) if i.include?("\ec[27]#{data.name}\ec[0] : \ei[751]") or !i.include?("\ec[18]")
+                      end
+                    if $game_party.gold == data.condition[i].num
+                      SceneManager.scene.event_window_add_text2(YEA::EVENT_WINDOW2::HEADER_TEXT+"\ec[24]#{data.name}\ec[0] : \ei[751] \ec[24]#{$game_party.gold}\ec[0] / \ec[24]#{data.condition[i].num.to_s}\ec[0]    "+YEA::EVENT_WINDOW2::CLOSER_TEXT)
+                      Audio.se_play("Audio/SE/Chime2", 100, 100) if $game_party.gold == data.condition[i].num
+                    elsif $game_party.gold < data.condition[i].num
+                      SceneManager.scene.event_window_add_text2(YEA::EVENT_WINDOW2::HEADER_TEXT+"\ec[27]#{data.name}\ec[0] : \ei[751] \ec[18]#{$game_party.gold}\ec[0] / \ec[24]#{data.condition[i].num.to_s}\ec[0]    "+YEA::EVENT_WINDOW2::CLOSER_TEXT)
+                    end
+                  end
+                end
+              end
+            end
+          
+          end   
      end   
  end           
      
@@ -5563,15 +7781,20 @@ class Game_Player < Game_Character
   def can_execute_field_item_effect?(item)
       if item.note =~ /<Drop HP Damage = (\S+)>/
          damage = $1.to_i
-         damage2 = damage * self.battler.mhp / 100
+         damage2 = damage #* self.battler.mhp / 100
          self.battler.damage = damage2
          self.battler.damage_pop = true
          self.battler.hp -= damage2
+         if self.battler.hp < ( self.battler.mhp * XAS_BA_ENEMY::LOWHP / 100 ) && ( damage2 > 0 )
+           $game_map.screen.start_flash(Color.new(255, 0, 0), 8)
+         else
+           $game_map.screen.start_flash(Color.new(255, 0, 0, 50), 8)
+         end
          return true
       end  
       if item.note =~ /<Drop MP Damage = (\S+)>/
          damage = $1.to_i
-         damage2 = damage * self.battler.mmp / 100
+         damage2 = damage #* self.battler.mmp / 100
          self.battler.mp -= damage2         
          self.battler.damage_type = "Mp"   
          self.battler.damage = damage2
@@ -5580,9 +7803,10 @@ class Game_Player < Game_Character
       end       
       if item.note =~ /<Drop Gold = (\d+)>/
          gold = $1.to_i
-         damage = $data_system.terms.gold + " " + gold.to_s
-         self.battler.damage = damage
+         damage = $data_system.currency_unit
+         self.battler.damage = "+" + gold.to_s + " " + damage
          self.battler.damage_pop = true
+         self.battler.damage_type = "Gold"
          $game_party.gain_gold(gold)
          return true
       end
@@ -5792,8 +8016,8 @@ class Sprite_Base < Sprite
       if value.is_a?(Numeric) 
          bitmap_number_image = Cache.system("XAS_Damage_Number")
          bitmap_im_cw = bitmap_number_image.width / 10
-         bitmap_im_ch = bitmap_number_image.height / 5           
-         bitmap = Bitmap.new(bitmap_number_image.width,(bitmap_im_ch * 2) + 5)
+         bitmap_im_ch = bitmap_number_image.height / 5            
+         bitmap = Bitmap.new(bitmap_number_image.width * 3,(bitmap_im_ch * 2) + 5)
          bitmap_number_text = value.to_s.split(//)
          center_x = (((2 + bitmap_number_text.size) * bitmap_im_cw) / 2)
          # Damage Color         
@@ -6103,8 +8327,8 @@ class Sprite_Base < Sprite
                   sprite.x = self.x + cx
                   sprite.y = self.y + cy + (height / 2) 
               when 3  
-                  sprite.x  = (544 / 2) + cx
-                  sprite.y  = (416 / 2) + cy     
+                  sprite.x  = (640 / 2) + cx
+                  sprite.y  = (480 / 2) + cy     
         end        
         
         
@@ -6241,6 +8465,9 @@ class Sprite_Character < Sprite_Base
   #--------------------------------------------------------------------------              
   def update_x_effects
       update_collaspse_effects if @character.collapse_duration > 0
+      if @character.gain_duration != nil
+      update_gain_effects if @character.gain_duration > 0
+      end
       update_sprite_position
       update_angle
       update_zoom
@@ -6374,6 +8601,7 @@ class Sprite_Character < Sprite_Base
                @character.x = bullet_user.x
                @character.y = bullet_user.y
                @character.direction = bullet_user.direction
+               @character.erase if bullet_user.dead?
             end
          end  
       end  
@@ -6441,6 +8669,7 @@ class Sprite_Character < Sprite_Base
      if @balloon_duration > 0
         @balloon_duration -= 1
         if @balloon_duration > 0
+           @balloon_sprite.viewport = @viewport2
            @balloon_sprite.x = x
            @balloon_sprite.y = y - XAS_BA::BALLOON_HEIGHT
            @balloon_sprite.z = z + 200
@@ -6465,7 +8694,7 @@ class Game_Event < Game_Character
   # ● Near The Screen
   #--------------------------------------------------------------------------  
   alias x_near_the_screen near_the_screen?
-  def near_the_screen?(dx = 12, dy = 8)
+  def near_the_screen?(dx = 999, dy = 999)
       return true if can_update_out_screen?
       x_near_the_screen(dx, dy)
   end
@@ -6729,7 +8958,7 @@ class Scene_Target_Select
  #--------------------------------------------------------------------------    
  def create_skill_name
      @skill_name = Plane.new
-     @skill_name.bitmap = Bitmap.new(640,480)
+     @skill_name.bitmap = Bitmap.new(640,40)
      @skill_name.z = 10103
      @skill_name.bitmap.font.size = 20
      @skill_name.bitmap.font.bold = true
@@ -6994,6 +9223,8 @@ class Game_Event < Game_Character
       update_event_before_movement
       x_main_event_update
       update_event_after_movement
+      update_respawn_time
+      event_respawn_check
   end   
   
   #--------------------------------------------------------------------------
@@ -7010,6 +9241,39 @@ class Game_Event < Game_Character
   def update_event_after_movement
       
   end    
+  
+  #-----------------------------------------------------------------------------
+  # ● 적 재출현 시간 갱신 
+  #-----------------------------------------------------------------------------
+  def update_respawn_time
+    return if $game_message.visible || $game_map.interpreter.running?
+    $game_troop.events_respawn_time = [] if $game_troop.events_respawn_time == nil
+    return if $game_troop.events_respawn_time.empty? || $game_troop.events_respawn_time.nil?
+    $game_troop.events_respawn_time.each { | i | i[2] -= 1 if i[2] > 0; $game_troop.events_respawn_time.delete(i) if i[2] == 0 }
+  end
+  
+  #-----------------------------------------------------------------------------
+  # ● 적 재출현
+  #-----------------------------------------------------------------------------
+  def event_respawn_check
+    @enemy_id = 0
+    if self.name =~ /<Enemy(\d+)>/i
+      unless self.name =~ /<NORESPAWN>/i
+        @enemy_id = $1.to_i
+        $game_troop.events_respawn_time = [] if $game_troop.events_respawn_time == nil
+        enb = true
+        $game_troop.events_respawn_time.each { | i | enb = false if i[0] == @map_id && i[1] == self.id }
+        if enb && self.erased && self.battler.is_a?(Game_Enemy)
+          map = Game_Map.new
+          map.setup(@map_id)
+          $game_map.events[self.id] = map.events[self.id]
+          @battler = $game_map.events[self.id].battler
+          self.battler.gain_duration = 120
+          SceneManager.scene.spriteset.add_event( $game_map.events[self.id] )
+        end
+      end
+    end
+  end
   
 end  
 
@@ -7049,30 +9313,11 @@ class Game_Player < Game_Character
   
 end
 
-#==============================================================================
-# ■ Sprite Picture
-#==============================================================================
-class Sprite_Picture < Sprite
+#===============================================================================
+# □ Game_Troop
+#===============================================================================
+class Game_Troop < Game_Unit
   
- #--------------------------------------------------------------------------
- # ● Update
- #--------------------------------------------------------------------------     
-  alias mog_fix_picture_erased_update update
-  def update
-      return if picture_erased?  
-      mog_fix_picture_erased_update
-  end  
-  
- #--------------------------------------------------------------------------
- # ● Picture Erased?
- #--------------------------------------------------------------------------     
-  def picture_erased?
-      return false if @picture.name != ""
-      if self.bitmap != nil
-         self.bitmap.dispose
-         self.bitmap = nil
-      end  
-      return true 
-  end
+  attr_accessor :events_respawn_time
   
 end
